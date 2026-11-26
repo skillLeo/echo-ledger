@@ -89,8 +89,18 @@ fun ActorAvatar(actor: ActorDto, modifier: Modifier = Modifier, size: Dp = EchoT
     val person = url?.let { AvatarCache.personOf(it, actor.id?.toString().orEmpty()) }?.takeIf { it.isNotEmpty() }
     // Kept by person and version, not by the signed address (re-signed every hour), and starting from a picture already
     // drawn: a row coming back into view, or re-signed, never flashes its initials.
-    var picture by remember(person, version) {
-        mutableStateOf(if (person != null && version != null) ActorPictures.shared.peek(person, version) else null)
+    // The server it is on, from the address itself (the same as the paired server's, which is the only one it is read from).
+    val server = AvatarCache.originOf(url)
+    var picture by remember(server, person, version) {
+        mutableStateOf(
+            if (server != null && person != null &&
+                version != null
+            ) {
+                ActorPictures.shared.peek(server, person, version)
+            } else {
+                null
+            }
+        )
     }
     LaunchedEffect(person, version, url) {
         if (url == null || version == null || person == null) return@LaunchedEffect

@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -433,7 +431,7 @@ object ActivityWords {
         return when {
             kind == "missed_recording" -> EchoIcons.Missed
             item.isProblem() -> EchoIcons.Error
-            kind == "unusual_usage" -> Icons.Outlined.WarningAmber
+            kind == "unusual_usage" -> EchoIcons.Warning
             kind.contains("device") -> EchoIcons.Devices
             kind == "transcript_ready" -> EchoIcons.Check
             else -> EchoIcons.Bell

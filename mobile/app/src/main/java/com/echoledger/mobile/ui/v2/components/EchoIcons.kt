@@ -93,6 +93,7 @@ import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.Wallpaper
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.WorkspacePremium
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -163,6 +164,9 @@ object EchoIcons {
     val Empty: ImageVector get() = Icons.Outlined.Inbox
     val Projects: ImageVector get() = Icons.Outlined.FolderOpen
     val Bell: ImageVector get() = Icons.Outlined.Notifications
+
+    /** A warning (Activity's unusual use: the only sign of what it is). */
+    val Warning: ImageVector get() = Icons.Outlined.WarningAmber
     val Stop: ImageVector get() = Icons.Outlined.Stop
     val Mic: ImageVector get() = Icons.Outlined.Mic
     val MicOff: ImageVector get() = Icons.Outlined.MicOff

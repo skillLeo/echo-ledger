@@ -22,6 +22,7 @@ import java.io.File
 import java.security.MessageDigest
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** The authenticator's QR code (the otpauth URI), dark on light, with its quiet zone. */
 object QrCode {
@@ -144,11 +145,17 @@ class AvatarCache(private val dir: File, private val origin: String) {
             cleared += forget
         }
 
-        /** Sign-out, or a sign-in that may be another account: no one's picture stays on the phone. */
+        /**
+         * Sign-out, or a sign-in that may be another account: no one's picture stays on the phone. The pictures in memory
+         * go first, so a load running in between can't write the old account's picture back into a folder made again.
+         */
         fun clearAll(context: Context) {
-            dir(context).deleteRecursively()
             cleared.forEach { it() }
+            dir(context).deleteRecursively()
         }
+
+        /** The server an avatar address is on, as [com.echoledger.mobile.net.ApiClient.origin] writes it; null for no address. */
+        fun originOf(url: String?): String? = url?.toHttpUrlOrNull()?.let { "${it.scheme}://${it.host}:${it.port}" }
 
         /** The person an avatar address belongs to (`/api/avatars/{user}/{version}`), or [fallback]. */
         fun personOf(url: String?, fallback: String): String =

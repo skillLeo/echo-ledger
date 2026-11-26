@@ -139,17 +139,18 @@ class ActorPicturesTest {
         // The row that asked still draws it, but nothing comes back to the disk or into memory.
         assertEquals("face", running.await())
         assertNull(cache.get("7", 5))
-        assertNull(pictures.peek("7", 5))
+        assertNull(pictures.peek("https://ledger.test", "7", 5))
     }
 
     @Test
     fun aDrawnPictureIsThereAtOnceForTheNextRow() = runBlocking {
         val pictures = shared()
-        assertNull(pictures.peek("7", 6))
+        assertNull(pictures.peek("https://ledger.test", "7", 6))
         assertEquals("face", pictures.picture(cache, "https://ledger.test", "7", 6, "u1", fetchGiving("face")))
-        assertEquals("face", pictures.peek("7", 6))
-        assertNull("another version is another picture", pictures.peek("7", 7))
+        assertEquals("face", pictures.peek("https://ledger.test", "7", 6))
+        assertNull("another version is another picture", pictures.peek("https://ledger.test", "7", 7))
+        assertNull("another server's person 7 is another person", pictures.peek("https://other.test", "7", 6))
         pictures.clear()
-        assertNull(pictures.peek("7", 6))
+        assertNull(pictures.peek("https://ledger.test", "7", 6))
     }
 }

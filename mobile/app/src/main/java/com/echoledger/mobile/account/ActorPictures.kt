@@ -30,14 +30,17 @@ class SharedPictures<T : Any>(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val entries = HashMap<String, Entry<T>>()
 
-    /** The pictures drawn so far, by person and version: what a row shows at once ([peek]), before any load. */
+    /** The pictures drawn so far, by server, person and version: what a row shows at once ([peek]), before any load. */
     private val shown = HashMap<String, T>()
 
     /** Raised by [clear]: a load started before it keeps nothing. */
     @Volatile private var generation = 0L
 
-    /** [person]'s picture of [version] if one was drawn already, so a row coming back into view never flashes initials. */
-    fun peek(person: String, version: Long): T? = synchronized(entries) { shown["$person\n$version"] }
+    /**
+     * [person]'s picture of [version] on [origin]'s server if one was drawn already, so a row coming back into view never
+     * flashes initials.
+     */
+    fun peek(origin: String, person: String, version: Long): T? = synchronized(entries) { shown["$origin\n$person\n$version"] }
 
     /**
      * [person]'s picture of [version] on [cache]'s server ([origin]), or null for their initials. [fetch] downloads it
@@ -58,7 +61,7 @@ class SharedPictures<T : Any>(
                 known.picture
             } else {
                 val started = generation
-                scope.async { load(cache, person, version, url, fetch, started) }.also { entries[key] = Entry(url, now(), it) }
+                scope.async { load(cache, key, person, version, url, fetch, started) }.also { entries[key] = Entry(url, now(), it) }
             }
         }
         // Whatever went wrong, a row shows the initials: never an error into its effect.
@@ -81,6 +84,7 @@ class SharedPictures<T : Any>(
 
     private suspend fun load(
         cache: AvatarCache,
+        key: String,
         person: String,
         version: Long,
         url: String,
@@ -88,7 +92,7 @@ class SharedPictures<T : Any>(
         started: Long
     ): T? {
         runCatching { cache.get(person, version) }.getOrNull()?.let { kept ->
-            runCatching { decode(kept) }.getOrNull()?.let { return drawn(person, version, it, started) }
+            runCatching { decode(kept) }.getOrNull()?.let { return drawn(key, it, started) }
             // A copy that doesn't draw (cut short, damaged) is no copy: forgotten and asked for again.
             runCatching { cache.forget(person) }
         }
@@ -96,11 +100,11 @@ class SharedPictures<T : Any>(
         val picture = runCatching { decode(bytes) }.getOrNull() ?: return null
         // Kept on the disk unless a sign-out came meanwhile; a disk that fails only means it isn't kept.
         if (started == generation) runCatching { cache.put(person, version, bytes) }
-        return drawn(person, version, picture, started)
+        return drawn(key, picture, started)
     }
 
-    private fun drawn(person: String, version: Long, picture: T, started: Long): T {
-        synchronized(entries) { if (started == generation) shown["$person\n$version"] = picture }
+    private fun drawn(key: String, picture: T, started: Long): T {
+        synchronized(entries) { if (started == generation) shown[key] = picture }
         return picture
     }
 

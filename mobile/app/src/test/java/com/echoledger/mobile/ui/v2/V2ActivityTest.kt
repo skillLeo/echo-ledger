@@ -1,7 +1,9 @@
 package com.echoledger.mobile.ui.v2
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -25,13 +27,16 @@ import com.echoledger.mobile.ui.v2.activity.ActorLook
 import com.echoledger.mobile.ui.v2.activity.ActorLookKey
 import com.echoledger.mobile.ui.v2.activity.V2ActivityContent
 import com.echoledger.mobile.ui.v2.components.rememberEchoToastState
+import com.echoledger.mobile.ui.v2.shell.LocalAvatarColour
 import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
+import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Activity v2 against classic's Activity tab (parity.csv PH-OTH-011…017): Needs action, Today and Earlier; a tap marks
@@ -66,12 +71,14 @@ class V2ActivityTest : ScreenTest() {
 
     private fun show(
         language: EchoLanguage = EchoLanguage.English,
+        /** The signed-in person's colour, as the shell provides it ([LocalAvatarColour]); null: none. */
+        accountColour: Int? = null,
         waiting: List<LocalRecording> = emptyList(),
         skipped: List<LocalRecording> = emptyList(),
         missedItems: List<MissedItem> = emptyList()
     ) = show {
         EchoV2Theme(darkTheme = false, language = language) {
-            CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {
+            CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState(), LocalAvatarColour provides accountColour) {
                 V2ActivityContent(
                     load = {
                         loads++
@@ -294,5 +301,26 @@ class V2ActivityTest : ScreenTest() {
         val row = compose.onNode(hasText("Ayesha Khan sent you", substring = true) and hasClickAction()).fetchSemanticsNode()
         assertTrue("the row's words have no initials", !hasText("AK").matches(row))
         assertEquals(1, compose.onAllNodes(hasTestTag(ACTOR_AVATAR_TAG), useUnmergedTree = true).fetchSemanticsNodes().size)
+    }
+
+    /** Each face is drawn in its own person's colour, never the signed-in person's that the shell provides around it. */
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun anActorsFaceIsInTheirColourNotTheAccountHolders() {
+        answer = ActivityResponse(
+            listOf(
+                item("a1", "Ayesha Khan sent you Payment terms", "2026-11-21T09:00:00Z", kind = "shared_with_you")
+                    .copy(actor = ActorDto(id = 7, name = "Ayesha Khan", avatarColor = 3))
+            )
+        )
+        show(accountColour = 6)
+        await("Ayesha Khan sent you")
+        val face = compose.onNode(hasTestTag(ACTOR_AVATAR_TAG), useUnmergedTree = true).captureToImage().toPixelMap()
+        // A point inside the circle, clear of the initials in its middle and the ring at its edge.
+        val drawn = face[face.width / 5, face.height / 2]
+        fun near(a: androidx.compose.ui.graphics.Color, b: androidx.compose.ui.graphics.Color) =
+            kotlin.math.abs(a.red - b.red) < 0.03f && kotlin.math.abs(a.green - b.green) < 0.03f && kotlin.math.abs(a.blue - b.blue) < 0.03f
+        assertTrue("the actor's colour 3, got $drawn", near(drawn, EchoTokens.Light.avatar3))
+        assertTrue("never the account holder's colour 6", !near(drawn, EchoTokens.Light.avatar6))
     }
 }
