@@ -440,5 +440,52 @@ class MarkReadManyTest : ScreenTest() {
         assertEquals(!now, opened("01K001"))
     }
 
+    /** Review of the follow-ups, round 3 (1): one at a time, a part's done ones are the server's before a later change goes. */
+    @Test
+    fun `one at a time, what a part did counts as the server's before a later change to it goes`() {
+        seed()
+        val older = FakeServer.json(405, """{"message":"Not allowed","code":"method_not_allowed"}""")
+        server.on("POST", "/api/sessions/opened", older)
+        server.on("DELETE", "/api/sessions/opened", older)
+        server.on("POST", "/api/sessions/01K\\d+/opened", oneAnswer)
+        server.on("DELETE", "/api/sessions/01K001/opened", oneAnswer)
+        // 01K201, in the run's second part, has a request on its way first: the run waits there after its first part.
+        val gate = server.hold()
+        server.on("POST", "/api/sessions/01K201/opened") { request ->
+            gate.await(30)
+            oneAnswer(request)
+        }
+        val first = elsewhere.async { vm.markReadAs(item("01K201"), read = true) }
+        waitFor("01K201's request on its way") { server.requestsTo("POST", "/api/sessions/01K201/opened").isNotEmpty() }
+        val run = elsewhere.async { vm.setOpened(ids.take(250), true) }
+        waitFor("the run's first part done") { singles("POST").count { it != "01K201" } == Organise.MAX_BULK }
+        // Marked unread meanwhile (01K001 is in the first part), and the server takes it.
+        assertEquals(setOf("01K001"), runBlocking { withTimeout(20_000) { vm.setOpened(listOf("01K001"), false) } }.done)
+        gate.open()
+        runBlocking { withTimeout(20_000) { first.await() to run.await() } }
+        // A refused Mark as read now goes back to what the server has: unread.
+        server.on("POST", "/api/sessions/01K001/opened", FakeServer.json(503, down))
+        assertTrue(runBlocking { vm.markReadAs(item("01K001"), read = true) }.isFailure)
+        assertEquals("unread, as the server has it", false, opened("01K001"))
+    }
+
+    /** Review of the follow-ups, round 3 (2): a sync that read the old state while a change was on its way doesn't stay. */
+    @Test
+    fun `a sync that read the old state before the server took a change doesn't stay on screen`() {
+        seed()
+        val gate = server.hold()
+        server.on("POST", "/api/sessions/01K001/opened") { request ->
+            gate.await(30)
+            oneAnswer(request)
+        }
+        val mark = elsewhere.async { vm.markReadAs(item("01K001"), read = true) }
+        waitFor("on its way") { server.requestsTo("POST", "/api/sessions/01K001/opened").isNotEmpty() }
+        runBlocking { app.graph.library.refresh() }
+        assertEquals("the sync read the old state", false, opened("01K001"))
+        gate.open()
+        assertTrue(runBlocking { withTimeout(20_000) { mark.await() } }.isSuccess)
+        assertEquals("read, as the server has it now", true, opened("01K001"))
+    }
+
     private fun item(id: String) = app.graph.library.items.value.first { it.id == id }
 }

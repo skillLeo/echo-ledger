@@ -1644,6 +1644,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val gen = graph.library.generation()
         val done = LinkedHashSet<String>()
         val gone = LinkedHashSet<String>()
+        // Done one at a time and not yet counted as the server's: counted before their part lets a later change go.
+        val unconfirmed = LinkedHashSet<String>()
         var oneByOne = false
         var asked = 0
         var failure: Throwable? = null
@@ -1680,6 +1682,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 try {
                     if (opened) api.markOpened(id) else api.markUnopened(id)
                     done += id
+                    unconfirmed += id
                 } catch (e: ApiException) {
                     if (e.status != 404) {
                         failure = e
@@ -1691,9 +1694,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     break@run
                 }
             }
+            if (unconfirmed.isNotEmpty()) graph.library.confirmOpenedLocally(unconfirmed, opened, gen, turn.change)
+            unconfirmed.clear()
             turn.done(chunk)
         }
-        if (oneByOne) graph.library.confirmOpenedLocally(done, opened, gen, turn.change)
+        // A run that stopped partway: its last part, still held in line, did these.
+        if (unconfirmed.isNotEmpty()) graph.library.confirmOpenedLocally(unconfirmed, opened, gen, turn.change)
         if (gone.isNotEmpty()) syncSoon()
         return OpenedRun(done, gone, all.filter { it !in done && it !in gone }, failure)
     }

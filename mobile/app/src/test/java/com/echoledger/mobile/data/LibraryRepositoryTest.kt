@@ -636,4 +636,27 @@ class LibraryRepositoryTest : AppTest() {
         repo.markOpenedLocally("a", gen, older)
         assertEquals("an opening with an older number is dropped", false, a())
     }
+
+    /**
+     * Review of the follow-ups, round 3 (3): one recording's answer, read outside the library's lock, may be older than
+     * a change the server took since; what the server has stays the change's.
+     */
+    @Test
+    fun `an answer read before a change the server took doesn't count as the server's`() = runBlocking {
+        val repo = repository()
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a")))))
+        repo.refresh()
+        val gen = repo.generation()
+        fun a() = repo.items.value.first { it.id == "a" }.opened
+        val answer = repo.items.value.first { it.id == "a" }.copy(opened = true)
+        val taken = repo.nextOpenedChange()
+        repo.setOpenedLocally(listOf("a"), false, gen, taken)
+        repo.confirmOpenedLocally(listOf("a"), false, gen, taken)
+        // The answer for one recording, read before the change landed, arrives now.
+        repo.upsertLocally(answer, gen)
+        val refused = repo.nextOpenedChange()
+        repo.setOpenedLocally(listOf("a"), true, gen, refused)
+        repo.undoOpenedLocally("a", refused, gen)
+        assertEquals("back to unread, as the server has it", false, a())
+    }
 }

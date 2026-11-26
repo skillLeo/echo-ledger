@@ -155,9 +155,10 @@ class LibraryRepository(
 
     /**
      * What the server holds for each row changed here: the row as it was at its first change, then each change the
-     * server took ([confirmOpenedLocally]) and each row a sync or an answer brought. A refused change goes back to it
-     * ([undoOpenedLocally]), never to the state of the change before it, which the server may not have. Guarded by
-     * this object's lock.
+     * server took ([confirmOpenedLocally]) and each row a sync brought. A refused change goes back to it
+     * ([undoOpenedLocally]), never to the state of the change before it, which the server may not have. One recording's
+     * answer ([upsertLocally]) doesn't count: it is read outside the library's lock, so it may be older than a change
+     * taken since. Guarded by this object's lock.
      */
     private val openedOnServer = HashMap<String, Boolean?>()
 
@@ -165,16 +166,19 @@ class LibraryRepository(
     fun nextOpenedChange(): Long = openedChange.incrementAndGet()
 
     /**
-     * The ones of [ids] whose last change is older than [change], which they now carry; a row's first change notes what
-     * the server holds for it (the row as it is). Called inside synchronized(this).
+     * The ones of [ids] whose last change is older than [change] (or [change] itself, when [itsOwn]), which they now
+     * carry; a row's first change notes what the server holds for it (the row as it is). Called inside synchronized(this).
      */
-    private fun claimOpened(ids: Collection<String>, change: Long): Set<String> {
+    private fun claimOpened(ids: Collection<String>, change: Long, itsOwn: Boolean = false): Set<String> {
         val unknown = ids.filterNot { it in openedOnServer }.toSet()
         if (unknown.isNotEmpty()) _items.value.forEach { if (it.id in unknown) openedOnServer[it.id] = it.opened }
-        return ids.filterTo(HashSet()) { (openedChanges[it] ?: 0L) < change }.onEach { openedChanges[it] = change }
+        return ids.filterTo(HashSet()) {
+            val last = openedChanges[it] ?: 0L
+            last < change || (itsOwn && last == change)
+        }.onEach { openedChanges[it] = change }
     }
 
-    /** Rows from the server (a sync's, an answer's): what they hold is what the server has. Called inside synchronized(this). */
+    /** A sync's rows: what they hold is what the server has. Called inside synchronized(this). */
     private fun noteServerRows(rows: List<LibraryItem>) {
         if (openedOnServer.isEmpty()) return
         rows.forEach { if (it.id in openedOnServer) openedOnServer[it.id] = it.opened }
@@ -218,12 +222,13 @@ class LibraryRepository(
 
     /**
      * The server took [change] for [ids] (read when [opened]): that is what it holds now, and the rows show it unless a
-     * newer change came to them. Nothing when signed out since [expected].
+     * newer change came to them, even where a sync read meanwhile put the state from before it back. Nothing when signed
+     * out since [expected].
      */
     suspend fun confirmOpenedLocally(ids: Collection<String>, opened: Boolean, expected: Int, change: Long) = lock.withLock {
         synchronized(this) {
             if (expected != gen) return@withLock
-            val claimed = claimOpened(ids, change)
+            val claimed = claimOpened(ids, change, itsOwn = true)
             ids.forEach { openedOnServer[it] = opened }
             writeOpened(claimed, opened)
         }
@@ -268,7 +273,6 @@ class LibraryRepository(
     suspend fun upsertLocally(item: LibraryItem, expected: Int) = lock.withLock {
         synchronized(this) {
             if (expected != gen) return@withLock
-            noteServerRows(listOf(item))
             val current = _items.value
             val updated = if (current.any { it.id == item.id }) {
                 current.map {
