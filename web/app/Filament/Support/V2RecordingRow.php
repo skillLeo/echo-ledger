@@ -103,7 +103,7 @@ final class V2RecordingRow
         return $final?->status === TranscriptStatus::Completed && filled($final->text) ? (TranscriptViews::rowPreview($final, 140)['text'] ?? $final->preview(140)) : null;
     }
 
-    /** "Audio · N days left" shows from this many days left (EL-Design: not a badge on every row). */
+    /** "Audio · N days left" shows from this many days left (the design: not a badge on every row). */
     public const DAYS_LEFT_FROM = 7;
 
     /** …and in the warning colour from this many days left down. */
@@ -131,7 +131,7 @@ final class V2RecordingRow
     }
 
     /**
-     * Each label's dot (at most three), by the design's label colour rules (EL-Design's .v2-label-dot classes): one of
+     * Each label's dot (at most three), by the design's label colour rules (the design's .v2-label-dot classes): one of
      * the eight takes its class; any other stored #rrggbb draws only as the dot, through --label-own, with a hairline
      * ring; no colour, or a value that isn't #rrggbb, the neutral ringed dot. The stored value is never text or fill.
      *

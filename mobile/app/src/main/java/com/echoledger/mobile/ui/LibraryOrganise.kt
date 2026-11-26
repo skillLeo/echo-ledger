@@ -169,7 +169,7 @@ fun BinSection(
     onClose: () -> Unit
 ) {
     var items by remember { mutableStateOf<List<com.echoledger.mobile.data.BinItemDto>?>(null) }
-    // A bin the server could not give is not an empty one (EL-UX's audit): it says so, with Try again.
+    // A bin the server could not give is not an empty one (the UX audit): it says so, with Try again.
     var failed by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf<String?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()

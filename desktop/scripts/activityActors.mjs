@@ -1,4 +1,4 @@
-// Contract 2.0.0-aa (UX-18, lead decision 27): Activity items about a person show them in the icon's place for the kinds
+// Contract 2.0.0-aa (UX-18, decision 27): Activity items about a person show them in the icon's place for the kinds
 // that show a face, their picture (a teammate who sent a recording) or their initials in their colour (an upgrade asked
 // for, no picture); a receipt asked for keeps its tile. The new look on a Mac and on Windows, the new look in Urdu (right
 // to left), and the classic page, light and dark, at 1280 × 800, in the screens fixture with &actors=1. Each picture is

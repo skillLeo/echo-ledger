@@ -126,7 +126,8 @@ export function ShortcutsPageV2({ settings, status, run, onSettings, threeLevels
   const noteFor = (a: ShortcutAction): string | null => {
     const error = status.shortcutErrors.find(([x]) => x === a)?.[1];
     if (error) return error;
-    // Who else uses it, by name (EL-UX: only the app's name is a value; browsers and many apps have their own lines).
+    // Who else uses it, by name (UX review: only the app's name is a value; browsers and many apps have their own
+    // lines).
     const owner = conflictOwner(settings.shortcuts[a], platform);
     if (!owner) return null;
     if (owner.kind === "browsers") return t("This shortcut is also used by browsers; EchoLedger takes it over.");

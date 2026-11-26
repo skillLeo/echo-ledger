@@ -179,7 +179,7 @@ try {
     if (long && !/Follow up with Qureshi/.test(m.title ?? "")) problems.push(`${name}: the long view isn't the page ("${m.title}")`);
     console.log(`${name}: page ${m.css} CSS px; ${m.sideways ? "SIDEWAYS SCROLL" : "fits"}; title ${long ? `"${m.title}" ` : ""}${m.cut ? "CUT" : "whole"}${m.overflow ? " ROW OVERFLOWS" : ""}; row ${m.row ? "on screen" : "OFF"}; rail ${m.rail ? "to Account" : "CUT"}; ${where}; badge on ${m.badge}; chip ${m.chip ? "shown" : "none"}; panel ${m.panel}${m.under.length ? `; UNDER THE BUTTONS: ${m.under.join(", ")}` : ""}`);
     if (m.sideways) problems.push(`${name}: wider than the window`);
-    // The title never loses a word, at any width (lead decision 18; its narrow case wraps it instead).
+    // The title never loses a word, at any width (decision 18; its narrow case wraps it instead).
     if (m.cut) problems.push(`${name}: the title is cut`);
     if (m.overflow) problems.push(`${name}: the title row is wider than its room`);
     if (!m.row) problems.push(`${name}: the title row is off the screen`);
@@ -192,7 +192,7 @@ try {
     if (m.under.length) problems.push(`${name}: under the window's buttons: ${m.under.join(", ")}`);
     await page.close();
   }
-  // The narrow row's search (lead decision 18's narrow case): Search opens the field across the row, Esc closes it.
+  // The narrow row's search (decision 18's narrow case): Search opens the field across the row, Esc closes it.
   for (const theme of ["light", "dark"]) {
     const shot = `720x560-200-en-search${theme === "dark" ? "-dark" : ""}`;
     const page = await open(720, 200, "en", theme, { height: 560 });

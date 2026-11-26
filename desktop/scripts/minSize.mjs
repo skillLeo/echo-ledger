@@ -1,5 +1,5 @@
 // FIX-08: the least window. The main window can't be made smaller than tauri.conf.json's minWidth × minHeight (720 ×
-// 560, lead decisions 4 and 11). This walks the new design's main pages in that window, and in 720 × 520 (the height the
+// 560, decisions 4 and 11). This walks the new design's main pages in that window, and in 720 × 520 (the height the
 // decisions name for when the new rail fits), at 100% and 200% zoom (the page that many CSS pixels smaller, drawn that
 // much bigger, as UX-07's zoom does), on a Mac (its window buttons drawn) and on Windows, and measures:
 //   - nothing wider than the window (no sideways scroll);

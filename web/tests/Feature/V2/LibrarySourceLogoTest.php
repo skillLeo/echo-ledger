@@ -16,7 +16,7 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
  * U9b: WEB-LIB-020, each row of the new Library leads with the app's own mark and a badge for the device it came from
- * (EL-Design's filament.v2.components.source-logo, as the desktop's SourceAvatar), named for assistive tools; and the
+ * (filament.v2.components.source-logo, as the desktop's SourceAvatar), named for assistive tools; and the
  * grouping's counts, worked out from the rows' raw columns for a large library, keep the groups' own keys.
  */
 

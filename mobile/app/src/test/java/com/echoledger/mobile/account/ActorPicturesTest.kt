@@ -13,7 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Lead decision 27 on the phone: one fetch per server, person and version for every row that shows them; no picture is
+ * Decision 27 on the phone: one fetch per server, person and version for every row that shows them; no picture is
  * remembered (no refetch on every redraw) until a new signed address or a while later; the disk copy is whole or none.
  */
 class ActorPicturesTest {

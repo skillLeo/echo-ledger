@@ -80,7 +80,7 @@ describe("activity page (B18)", () => {
       { id: "a1", kind: "shared_with_you", title: "Ana sent you Call with Omar", body: "for tomorrow", session_id: "s9", read: false, at: "2026-10-28T10:00:00Z",
         actor: { id: 12, name: "Ana Malik", avatar_url: "https://ledger.example.test/api/avatars/12/1763700000?signature=x", avatar_version: 1763700000, avatar_color: 3 } },
       { id: "a2", kind: "upgrade_requested", title: "Sara asked to upgrade to Pro", body: "", session_id: null, read: false, at: "2026-10-28T09:30:00Z", actor: sara },
-      // Lead decision 27: a receipt asked for and unusual use keep their tiles, whoever they are about.
+      // Decision 27: a receipt asked for and unusual use keep their tiles, whoever they are about.
       { id: "a3", kind: "upgrade_receipt_requested", title: "Sara asked for your receipt", body: "", session_id: null, read: false, at: "2026-10-28T09:20:00Z", actor: sara },
       { id: "a4", kind: "unusual_usage", title: "Unusual use on your account", body: "", session_id: null, read: false, at: "2026-10-28T09:10:00Z", actor: sara },
       { ...ITEMS[0], actor: null },

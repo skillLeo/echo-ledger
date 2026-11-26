@@ -10,7 +10,7 @@ use Filament\Support\Enums\IconSize;
 use Illuminate\Contracts\Support\Htmlable;
 
 /**
- * W-234 (the lead's RTL icons decision, as the desktop and the phone have it): right to left, the icons that point a
+ * W-234 (the RTL icons decision, as the desktop and the phone have it): right to left, the icons that point a
  * way (a row's ›, a back link's ‹) or read as text (the help "?", which is ؟ in Urdu, a chat bubble, a missed call,
  * sign out) are mirrored; the media player's skip back and forward are not. The mirror is the new design's
  * v2-icon-flip ([dir=rtl] in resources/css/v2/console.css), and it is added only while the console reads right to left,

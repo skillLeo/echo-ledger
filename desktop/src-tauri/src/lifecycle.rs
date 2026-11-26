@@ -286,7 +286,7 @@ pub fn ready(app: &AppHandle, label: &str) {
 }
 
 /// The use that keeps the dictation box built while the app idles. Built cold it takes about a second (WebView2 has
-/// to start first, measured in docs/HANDOFF.md "Phase 6 results"), too slow for a shortcut that must answer at once;
+/// to start first, measured in docs/PERFORMANCE.md), too slow for a shortcut that must answer at once;
 /// kept built (hidden and click-through) it shows with one event. It is the only window kept while idle.
 pub const WARM: &str = "warm";
 

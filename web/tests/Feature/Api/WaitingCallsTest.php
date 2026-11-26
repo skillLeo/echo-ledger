@@ -18,7 +18,7 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 uses(InteractsWithDeviceApi::class);
 
 /*
- * Contract 2.0.0-z, lead decision 20: a call waits for the person's choice only once it is over (ended_at, sent by
+ * Contract 2.0.0-z, decision 20: a call waits for the person's choice only once it is over (ended_at, sent by
  * PATCH /api/sessions/{id} when it ends) or started more than 4 hours ago. A call still being recorded, captions on,
  * raises no badge, is not in Needs you and is not `waiting`.
  */

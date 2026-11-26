@@ -34,7 +34,7 @@ export const SORT_ORDER: readonly SortKey[] = ["newest", "oldest", "longest", "t
 
 /**
  * The list in its sections: sorted, then grouped. Pinned recordings come first in their own "Pinned" section at the top
- * of every list, whatever the grouping (the lead decision: Pinned is no longer a folder of its own), unless
+ * of every list, whatever the grouping (a product decision: Pinned is no longer a folder of its own), unless
  * `pinnedFirst` is off (the list shows only pinned recordings already).
  */
 export function sections(items: readonly LibraryItem[], group: GroupKey, sort: SortKey, opened: Record<string, number>, pinnedFirst: boolean, now: Date = new Date()): ItemGroup[] {

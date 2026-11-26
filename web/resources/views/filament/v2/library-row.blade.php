@@ -12,7 +12,7 @@
 <div class="v2-lib-row" data-recording="{{ $row['id'] }}" data-important="{{ $row['important'] ? '1' : '0' }}" data-pinned="{{ $row['pinned'] ? '1' : '0' }}" data-opened="{{ $row['unread'] ? '0' : '1' }}"
     data-state="{{ $row['state'] }}" data-project="{{ $row['project'] ?? '' }}" data-labels="{{ json_encode($row['label_keys'], JSON_UNESCAPED_UNICODE) }}" data-audio="{{ $row['audio'] ? '1' : '0' }}"
     x-on:click="if (window.matchMedia('(min-width: 1024px)').matches && ! ($event.ctrlKey || $event.metaKey || $event.shiftKey || $event.button !== 0) && typeof $wire.selectRecording === 'function') { $event.preventDefault(); $wire.selectRecording('{{ $row['id'] }}') }">
-    {{-- The app's own mark and the device badge (EL-Design's source-logo); a click shows only that source's recordings. --}}
+    {{-- The app's own mark and the device badge (the design's source-logo); a click shows only that source's recordings. --}}
     <button type="button" class="v2-row-tile" title="{{ __('Show only :source recordings', ['source' => $row['quick_source_words']]) }}" style="background-color: transparent"
         x-on:click.prevent.stop="$wire.quickFilter('source', @js($row['quick_source']))" data-quick-source="{{ $row['quick_source'] }}">
         @include('filament.v2.components.source-logo', ['app' => $row['app'], 'device' => $row['device_kind'], 'label' => $row['source_words'], 'fallback' => $row['icon']])

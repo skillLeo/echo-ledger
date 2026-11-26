@@ -350,7 +350,7 @@ final class CallRules
 
                 break;
             }
-            // Privacy first (EL-Lead's ruling on B5): "ask" stops the search and follows the default, but a "Don't record"
+            // Privacy first (the B5 ruling): "ask" stops the search and follows the default, but a "Don't record"
             // after it (a later step or the default) still applies, so "Ask me" for Ahmed never records a Zoom call
             // that Zoom's rule says not to record.
             $later = [...array_map(fn (CallRule $r): string => $r->action, array_slice($steps, $i + 1)), $default];
@@ -450,7 +450,7 @@ final class CallRules
     }
 
     /**
-     * The one rule for [$number] (EL-Lead's ruling on B5): the exact number first; else the only rule with the same last
+     * The one rule for [$number] (the B5 ruling): the exact number first; else the only rule with the same last
      * 10 digits when one side has no country code. Two or more such rules (the same local number in two countries)
      * match none, so the call follows the next step rather than a guess.
      *

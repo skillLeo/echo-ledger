@@ -15,13 +15,13 @@ Builds:
 
 **1. Mac, about 15 minutes**
 1. **Install and check permissions.**
-   - Quit EchoLedger (⌘Q) and write "mac free". The lead installs 2.0.11 (installed 21:46).
+   - Quit EchoLedger (⌘Q) and write "mac free". The team installs 2.0.11 (installed 21:46).
    - Known in 2.0.11 (D-211, fix in 2.0.12): after it opens, the window can keep the old look (Inbox, Pinned, no rail) until you open another screen. Click Settings, then Library: the rail, the panel and the tabs show.
    - Open it. Allow Microphone, Screen Recording, System Audio Recording Only, and Automation for Chrome when asked. Then quit and reopen once.
 2. **Warning check.** Before allowing System Audio (if it isn't allowed yet), start a recording with a video playing.
    - Pass if within about 3 s the pill says "The other side isn't being recorded" with Open System Settings and Try again.
    - Allow it, press Try again, and the warning goes.
-3. **Zoom in Chrome, 1 minute**, with the phone as the other person. The lead watches mic.wav and system.wav grow live. Pass if both sides are in the transcript.
+3. **Zoom in Chrome, 1 minute**, with the phone as the other person. The team watches mic.wav and system.wav grow live. Pass if both sides are in the transcript.
 4. **After the meeting.** The calm card shows next to the pill:
    - the Zoom logo, the name, "0:44 · just now";
    - Delete and Transcribe;
@@ -69,7 +69,7 @@ Not in tonight's batch:
 4. **Titles.** Pass if no automatic title is in Urdu letters, e.g. yesterday's 8:41 pm voice note now reads in Roman Urdu.
 5. **Zoom in Chrome.** Join a test meeting with the phone as the other person; talk from both for 2 minutes; stop.
    - Pass if the transcript has both sides.
-   - The lead checks the audio files at the same time: system.wav must not be empty.
+   - The team checks the audio files at the same time: system.wav must not be empty.
 6. **WhatsApp desktop.** A 1-minute call. Pass if both sides are heard and the after-call card works (the current card; the new one comes later).
 
 **2. Phone (S25), about 25 minutes.** Check `mCallState=0` first.
@@ -334,7 +334,7 @@ The phone and Windows parts above were not run; they are carried into the next s
 ## Next free slots (from 2026-11-21) — Mac 2.0.3, phone 2.0.2, Windows 2.0.2, about 75 minutes
 
 Each part stands alone: run whichever device is free. Write "pass" or what you saw next to each step; a photo helps
-for anything that looks wrong. The lead installs the builds; you only use the apps.
+for anything that looks wrong. The team installs the builds; you only use the apps.
 
 Builds:
 - **Mac 2.0.3** (the half-screen fixes): built from release/v2.0.3, start-up check passed
@@ -459,7 +459,7 @@ group), never to a client. Before you start, note what is in Downloads.
 ## Tonight 20:00–21:30 PKT (2026-11-24) — Mac 2.0.14, phone 2.0.12, Windows 2.0.14, about 70 minutes
 
 Each part stands alone: run whichever device is free. Write "pass" or what you saw next to each step; a photo helps
-for anything that looks wrong. The lead installs the builds; you only use the apps.
+for anything that looks wrong. The team installs the builds; you only use the apps.
 
 Builds:
 - **Mac 2.0.14**: installed in /Applications at 18:41 (signature checked; 2.0.13 kept in ~/EchoLedger-backups).

@@ -87,7 +87,7 @@ class TranscriptTextTest {
         assertEquals("$note\n\n$marked", TranscriptText.copied(lines, noLines, false, "brackets", 0.5, true))
         assertEquals(marked, TranscriptText.copied(lines, noLines, false, "brackets", 0.5, false))
         assertEquals("Me: Send the invoice, [unclear].\nClient: Fine", TranscriptText.copied(lines, noLines, false, "off", 0.5, true))
-        // Marks turned off in the console stay off for Copy for AI too, with no note about them (the lead's rule, parity 5).
+        // Marks turned off in the console stay off for Copy for AI too, with no note about them (the rule of parity 5).
         assertEquals(
             "Me: Send the invoice, [unclear].\nClient: Fine",
             TranscriptText.copied(lines, noLines, false, "off", 0.5, true, forAi = true)
