@@ -100,7 +100,7 @@ One map for every platform: tokens/icons/settings.json. It holds the group and p
 - **Where they show.** Group headers use the accent colour; page rows use text-secondary. Both are 20 px on desktop and web, 24 dp on the phone.
 - **Right to left.** Two glyphs mirror: Sign out's arrow, and Help's question mark, which reads as ؟ in Urdu and Arabic. Use AutoMirrored on the phone and `directional` on desktop. No other settings glyph mirrors.
 
-What the screens change to match the map (owner EL-UX; the phone icons arrive in EchoIcons.kt with D10):
+What the screens change to match the map (owner: the v2 screens; the phone icons arrive in EchoIcons.kt with D10):
 | where | now | map |
 |---|---|---|
 | desktop GOAL_GROUPS (settings/SettingsV2.tsx:21–30) | Live & overlays: captions; About & help: circle-help | radio; life-buoy |
