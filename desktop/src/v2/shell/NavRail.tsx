@@ -12,6 +12,7 @@ import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 import { PROJECT_SORTS, projectOrder, useProjectSort } from "./projectSort";
 import { FAILED_WORDS, railBadgeLabel } from "../../lib/badge";
 import { isolate, isRtl, t } from "../../i18n";
+import { ariaKeys } from "../actions/registry";
 
 /** UX-03: the panel's width, dragged or set from the keyboard, from 200 to 360 px; let go below 160 px it closes. */
 export const PANEL_MIN = 200;
@@ -26,12 +27,17 @@ export const SHOW_PANEL_EVENT = "echoledger:show-panel";
 /** The rail's places, in their order (⌘1…⌘6); Home is the logo's, Record the round button's. */
 export type Place = "library" | "projects" | "live" | "ask" | "activity" | "settings";
 export const RAIL_PLACES: readonly Place[] = ["library", "projects", "live", "ask", "activity", "settings"];
-/** Each place's English name (the catalogue's key); placeName says it in the window's language. */
-export const PLACE_NAMES: Record<Place, string> = {
-  library: "Library", projects: "Projects", live: "Live", ask: "Ask", activity: "Activity", settings: "Settings",
-};
 /** A place's name in the window's language (the rail, its tooltips, More's menu, the panel's head). */
-export const placeName = (place: Place) => t(PLACE_NAMES[place]);
+export function placeName(place: Place): string {
+  switch (place) {
+    case "library": return t("Library");
+    case "projects": return t("Projects");
+    case "live": return t("Live");
+    case "ask": return t("Ask");
+    case "activity": return t("Activity");
+    case "settings": return t("Settings");
+  }
+}
 /** A name read out in parts ("Activity, 3, something failed"), joined as the window's language joins them. */
 export const spokenParts = (parts: readonly (string | null | undefined | false)[]) => parts.filter(Boolean).join(t("shell_context.separator"));
 /** "something failed", in the window's language. */
@@ -44,7 +50,7 @@ const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator
 const PANEL_KEYS = `${MAC ? "⌘" : "Ctrl+"}\\`;
 /** ⌘1 on a Mac, Ctrl+1 elsewhere. */
 export const placeKey = (place: Place) => `${MAC ? "⌘" : "Ctrl+"}${RAIL_PLACES.indexOf(place) + 1}`;
-const placeShortcut = (place: Place) => `Meta+${RAIL_PLACES.indexOf(place) + 1} Control+${RAIL_PLACES.indexOf(place) + 1}`;
+const placeShortcut = (place: Place) => [`⌘${RAIL_PLACES.indexOf(place) + 1}`, `Ctrl+${RAIL_PLACES.indexOf(place) + 1}`].map(ariaKeys).join(" ");
 
 /**
  * One place in the rail: its icon (with the selected place's pill behind it), its short name under it, and a number
@@ -360,7 +366,7 @@ export function ProjectsPanel({ projects, current, onAll, allCurrent, onOpen, on
   const unpinned = live.filter((p) => !p.pinned);
   const archived = projects.filter((p) => p.archived);
   const matches = q ? projects.filter((p) => p.name.toLowerCase().includes(q)).map((p) => ({ ...p, parent_id: null })).sort(order) : [];
-  const sortLabel = PROJECT_SORTS.find((s) => s.value === sort)!.label;
+  const sortLabel = t(PROJECT_SORTS.find((s) => s.value === sort)!.label);
   const head = useId();
   const searchKeys = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && matches.length) {
@@ -373,49 +379,49 @@ export function ProjectsPanel({ projects, current, onAll, allCurrent, onOpen, on
   };
   return (
     <div className="el-panel__group el-projects-panel" ref={box} onKeyDown={treeKeys}>
-      {projects.length >= PROJECT_SEARCH_FROM && <SearchField label="Search projects" value={find} onChange={setFind} onKeyDown={searchKeys} className="el-panel__search" />}
+      {projects.length >= PROJECT_SEARCH_FROM && <SearchField label={t("Search projects")} value={find} onChange={setFind} onKeyDown={searchKeys} className="el-panel__search" />}
       {q ? (
-        matches.length ? tree(matches, current, onOpen, { label: "Matches", order })
-          : <p className="el-caption el-secondary el-panel__none">No project matches</p>
+        matches.length ? tree(matches, current, onOpen, { label: t("Matches"), order })
+          : <p className="el-caption el-secondary el-panel__none">{t("No project matches")}</p>
       ) : (
         <>
           {pinned.length > 0 && (
             <section className="el-nav-section" aria-labelledby={`${head}-pinned`}>
-              <div className="el-nav-section__head"><h3 className="el-nav-section__title el-caption" id={`${head}-pinned`}>Pinned</h3></div>
-              {tree(withFolders(pinned, live), current, onOpen, { label: "Pinned", order })}
+              <div className="el-nav-section__head"><h3 className="el-nav-section__title el-caption" id={`${head}-pinned`}>{t("Pinned")}</h3></div>
+              {tree(withFolders(pinned, live), current, onOpen, { label: t("Pinned"), order })}
             </section>
           )}
           <section className="el-nav-section" aria-labelledby={`${head}-all`}>
             <div className="el-nav-section__head">
               <h3 className="el-nav-section__heading" id={`${head}-all`}>
-                <button type="button" className="el-nav-section__link el-caption" aria-current={allCurrent ? "page" : undefined} aria-label="All projects" title="All projects"
-                  onClick={onAll}>Projects</button>
+                <button type="button" className="el-nav-section__link el-caption" aria-current={allCurrent ? "page" : undefined} aria-label={t("All projects")} title={t("All projects")}
+                  onClick={onAll}>{t("Projects")}</button>
               </h3>
-              <Menu label="Sort projects" align="start"
-                items={PROJECT_SORTS.map((s) => ({ label: s.label, radio: true, checked: s.value === sort, onPick: () => setSort(s.value) }))}
-                button={{ variant: "quiet", size: "sm", icon: Icons.SortIcon, "aria-label": `Sort projects: ${sortLabel}`, title: `Sort projects: ${sortLabel}` }} />
-              {onNew && <Button size="sm" variant="quiet" icon={Icons.PlusIcon} aria-label="New project" title="New project" onClick={onNew} />}
+              <Menu label={t("Sort projects")} align="start"
+                items={PROJECT_SORTS.map((s) => ({ label: t(s.label), radio: true, checked: s.value === sort, onPick: () => setSort(s.value) }))}
+                button={{ variant: "quiet", size: "sm", icon: Icons.SortIcon, "aria-label": t("Sort projects: :sort", { sort: sortLabel }), title: t("Sort projects: :sort", { sort: sortLabel }) }} />
+              {onNew && <Button size="sm" variant="quiet" icon={Icons.PlusIcon} aria-label={t("New project")} title={t("New project")} onClick={onNew} />}
             </div>
             {loading ? (
-              <Loading label="Loading projects" className="el-panel__loading">
+              <Loading label={t("Loading projects")} className="el-panel__loading">
                 {[0, 1, 2].map((n) => <span key={n} className="el-panel__skeleton"><Skeleton width={n === 1 ? "medium" : "long"} /></span>)}
               </Loading>
             ) : error && projects.length === 0 ? (
-              <p className="el-caption el-secondary el-panel__none" role="status">Couldn't load the projects.</p>
-            ) : rest.length > 0 && tree(withFolders(rest, unpinned), current, onOpen, { label: "Projects", order })}
+              <p className="el-caption el-secondary el-panel__none" role="status">{t("Couldn't load the projects.")}</p>
+            ) : rest.length > 0 && tree(withFolders(rest, unpinned), current, onOpen, { label: t("Projects"), order })}
           </section>
           {archived.length > 0 && (
             <section className="el-nav-section" aria-labelledby={`${head}-archived`}>
               <div className="el-nav-section__head">
                 <h3 className="el-nav-section__heading" id={`${head}-archived`}>
                   <button type="button" className="el-nav-section__title el-caption" aria-expanded={archivedOpen} onClick={() => setArchivedOpen((o) => !o)}>
-                    <Icon icon={archivedOpen ? Icons.ChevronDownIcon : Icons.ChevronEndIcon} directional />Archived{" "}
+                    <Icon icon={archivedOpen ? Icons.ChevronDownIcon : Icons.ChevronEndIcon} directional />{t("Archived")}{" "}
                     <span className="el-nav-item__count el-caption el-num el-nav-item__count--quiet">{archived.length}</span>
                   </button>
                 </h3>
               </div>
               {archivedOpen && tree(withFolders(archived.filter((p) => !p.parent_id || !archived.some((a) => a.id === p.parent_id)), archived), current, onOpen,
-                { label: "Archived", order })}
+                { label: t("Archived"), order })}
             </section>
           )}
         </>
@@ -428,7 +434,7 @@ export function ProjectsPanel({ projects, current, onAll, allCurrent, onOpen, on
 export function NoProjectDrop() {
   return (
     <div className="el-nav-drop" aria-hidden="true" {...{ [DROP_ATTRIBUTE]: "" }}>
-      <Icon icon={Icons.InboxIcon} /><span>No project</span>
+      <Icon icon={Icons.InboxIcon} /><span>{t("No project")}</span>
     </div>
   );
 }

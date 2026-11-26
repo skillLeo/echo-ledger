@@ -48,7 +48,7 @@ const openAt = async (width, lang, theme, extra = "") => {
   // A busy machine serves the fixture slowly; the waits are for it to load, not a measure of anything.
   page.setDefaultTimeout(120_000);
   await page.goto(`${base}scripts/screens/index.html?screen=projects&theme=${theme}&uiflags=${V2_FLAGS}&platform=macos&lights=1${lang === "ur" ? "&lang=ur" : ""}${extra}`);
-  const rail = page.getByRole("navigation", { name: "Main" });
+  const rail = page.locator('nav[data-nav="main"]');
   await rail.waitFor();
   await rail.getByRole("button", { name: /^Projects/ }).click();
   await page.locator("[data-v2=projects]").first().waitFor();

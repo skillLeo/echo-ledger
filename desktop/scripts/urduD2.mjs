@@ -33,7 +33,7 @@ try {
       const opened = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });
       opened.setDefaultTimeout(120_000);
       await opened.goto(`${base}scripts/screens/index.html?screen=${screen}&uiflags=${FLAGS},v21_urdu${where}&applang=ur`);
-      await opened.getByRole("navigation", { name: "Main" }).waitFor();
+      await opened.locator('nav[data-nav="main"]').waitFor();
       await opened.waitForFunction(() => document.documentElement.dir === "rtl", null, { timeout: 15_000 }).catch(() => undefined);
       await opened.waitForTimeout(1000);
       return opened;

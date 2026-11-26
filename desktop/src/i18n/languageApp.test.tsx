@@ -45,7 +45,8 @@ async function app(flags: Record<string, boolean>, account: object | null | "loa
   respond("ui_flags", { ui_flags: { "ui_v2.shell": shell, "ui_v2.library": true, ...flags }, ui_classic: classic });
   render(<MainApp />);
   await settle();
-  await screen.findByRole("navigation", { name: "Main" }, { timeout: 15_000 });
+  // The app's navigation, by its attribute: its name is in the window's language ("Main", مرکزی).
+  await waitFor(() => expect(document.querySelector('nav[data-nav="main"]')).not.toBeNull(), { timeout: 15_000 });
   await settle();
 }
 

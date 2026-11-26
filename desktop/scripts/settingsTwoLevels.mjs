@@ -40,7 +40,7 @@ const open = async (width, lang, theme, screen = "settings", platform = "macos")
   // A busy machine serves the fixture slowly; the waits are for it to load, not a measure of anything.
   page.setDefaultTimeout(120_000);
   await page.goto(`${base}scripts/screens/index.html?screen=${screen}&theme=${theme}&uiflags=${V2_FLAGS}&platform=${platform}${platform === "macos" ? "&lights=1" : ""}${lang === "ur" ? "&lang=ur" : ""}`);
-  await page.getByRole("navigation", { name: "Main" }).waitFor();
+  await page.locator('nav[data-nav="main"]').waitFor();
   await page.locator("[data-v2=settings]").first().waitFor();
   return page;
 };

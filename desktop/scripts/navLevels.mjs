@@ -290,7 +290,7 @@ try {
     // The fixture opens a recording: its Back shows the list.
     await page.getByRole("button", { name: "Library", exact: true }).last().click();
     await page.locator("button[data-row-id]").first().waitFor();
-    const rail = page.getByRole("navigation", { name: "Main" });
+    const rail = page.locator('nav[data-nav="main"]');
     if (width < 1100) {
       await shoot("library");
       await rail.getByRole("button", { name: /^Library/ }).click();
@@ -354,7 +354,7 @@ try {
     await page.goto(`${base}scripts/screens/index.html?screen=library&theme=${theme}&uiflags=${V2_FLAGS}&platform=${platform}${extra}${lang === "ur" ? "&lang=ur" : ""}`);
     await page.getByRole("button", { name: "Library", exact: true }).last().click();
     await page.locator("button[data-row-id]").first().waitFor();
-    const rail = page.getByRole("navigation", { name: "Main" });
+    const rail = page.locator('nav[data-nav="main"]');
     // The owner's window: the Library with its panel hidden (below 1100 px it is a flyout, closed).
     const hide = page.getByTestId("nav-panel").getByRole("button", { name: "Hide panel" });
     if (await hide.count()) await hide.click();

@@ -542,7 +542,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const scrim = shown && narrow && panelFlyout;
   return (
     <div ref={box} className={`el-root el-shell el-shell--nav${shown ? " el-shell--panel" : ""}${narrow ? " el-shell--narrow" : ""}${short ? " el-shell--short" : ""}${panelFlyout ? " el-shell--flyouts" : ""}`} data-shell="v2">
-      <nav ref={railRef} className={`el-rail${compactRail ? " el-rail--compact" : ""}`} aria-label="Main" onFocus={railKeys.onFocus} onKeyDownCapture={railKeys.onKeyDownCapture}>
+      <nav ref={railRef} className={`el-rail${compactRail ? " el-rail--compact" : ""}`} aria-label={t("Main")} data-nav="main" onFocus={railKeys.onFocus} onKeyDownCapture={railKeys.onKeyDownCapture}>
         {/* The rail's top cell of the title row: the Mac's window buttons sit here (tauri.conf.json trafficLightPosition);
             it moves the window. 8 px in full screen; none on Windows under its system title bar, and with Windows' own
             title row (v21_win_titlebar) 48 px with the app's mark. */}

@@ -82,7 +82,16 @@ export const CONVERTED: readonly string[] = [
   // D-248: the system's right-click menus on a Mac (their words are the registry's and the callers', through t(); the
   // registry, the menu bar and contextMenus.ts keep only key names and the checks' own messages besides).
   "v2/actions/popup.ts",
-  // D-253: Record's split button in the rail (the rail itself, NavRail.tsx, keeps its places' English names as keys and
-  // the Projects panel; NavShell.tsx the rail's "Main", which the pictures' scripts find it by).
+  // D-253, D-255: the shell. Record's split button, the rail and its panels' head and the Projects panel, the rail's
+  // frame (NavShell: "Main" is said too; the scripts find it by data-nav), the sidebar shell, the status line, the zoom
+  // chip, Windows' own caption buttons and the other places' panels. TitleRow.tsx keeps its search words' English as
+  // keys (said through t()).
   "v2/shell/RecordSplit.tsx",
+  "v2/shell/NavRail.tsx",
+  "v2/shell/NavShell.tsx",
+  "v2/shell/Shell.tsx",
+  "v2/shell/status.ts",
+  "v2/shell/Zoom.tsx",
+  "v2/shell/WindowButtons.tsx",
+  "v2/shell/PlacePanels.tsx",
 ];

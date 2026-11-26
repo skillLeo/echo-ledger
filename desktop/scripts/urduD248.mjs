@@ -65,7 +65,7 @@ try {
     page.setDefaultTimeout(120_000);
     await asComputer(page, platform);
     await page.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${FLAGS},v21_urdu${where}&applang=ur`);
-    await page.getByRole("navigation", { name: "Main" }).waitFor();
+    await page.locator('nav[data-nav="main"]').waitFor();
     await page.waitForFunction(() => document.documentElement.dir === "rtl", null, { timeout: 30_000 }).catch(() => undefined);
     await page.waitForTimeout(1000);
 

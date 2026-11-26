@@ -9,15 +9,17 @@
 // (⌘F). The count always shows. Every empty part of the row, and the title, moves the window
 // (data-tauri-drag-region="deep": anything in it that can't be clicked); a double click does what the Mac's setting says
 // (lib/titleClick.ts). Buttons and the field never drag. A hairline shows under it only once the page has scrolled. The
-// page's part (title, count, search) comes from pageTitle.tsx.
+// page's part (title, count, search) comes from pageTitle.tsx. Its own words are the window's language (D-255), the
+// keys left to right in every language.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Icon, Icons } from "../components";
 import type { PageTitle } from "../pageTitle";
 import type { Place } from "./NavRail";
+import { isolate, isRtl, lineDir, t } from "../../i18n";
 
 const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
-/** The field's placeholder names the place; elsewhere it searches everything. */
+/** The field's placeholder names the place; elsewhere it searches everything (English: the catalogue's keys). */
 export const SEARCH_WORDS: Partial<Record<Place, string>> = {
   library: "Search recordings", projects: "Search projects", settings: "Search settings",
 };
@@ -28,6 +30,10 @@ export const SHORT_WORDS = "Search";
 /** Under this page width (CSS px: the window's least width) the row is narrow (lead decision 18's narrow case). */
 export const NARROW_BELOW = 720;
 const FIND_KEYS = MAC ? "⌘F" : "Ctrl+F";
+/** A shortcut inside words: left to right in every language (⌘K, never K⌘ after Urdu). */
+const keysIn = (keys: string) => (isRtl() ? isolate(keys) : keys);
+/** "Search recordings (⌘K)": words and their keys. */
+const withKeys = (words: string, keys: string) => `${words} (${keysIn(keys)})`;
 const narrowNow = () => typeof window !== "undefined" && window.innerWidth < NARROW_BELOW;
 /** Between the narrow row's parts: the row's gaps (2 × 8), the title's group's (2 × 4), the title's margin (4) and the
  * gap before its count (8). */
@@ -205,8 +211,13 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
     // Only a new ⌘F press opens it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [findSeq]);
-  const words = search?.placeholder ?? (place ? SEARCH_WORDS[place] : undefined) ?? EVERYTHING;
+  const placeWords = place ? SEARCH_WORDS[place] : undefined;
+  const words = search?.placeholder ?? (placeWords ? t(placeWords) : t(EVERYTHING));
+  const shortWords = t(SHORT_WORDS);
   const everyKeys = MAC ? "⌘K" : "Ctrl+K";
+  // "In: Clients": the scope the field searches, its name a value of the line (dir: Urdu's, or auto as before).
+  const scopeWords = search ? t("In: :scope", { scope: search.scope }) : "";
+  const scopeDir = lineDir(scopeWords);
   const everything = (typed: string) => {
     if (search && typed) type("");
     setScoped(false);
@@ -218,13 +229,13 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
       <div ref={start} className="el-titlerow__start">
         {toggle && (
           <Button size="sm" variant="quiet" icon={Icons.SidebarIcon} className="el-titlerow__toggle" aria-label={toggle.label} aria-expanded={toggle.expanded}
-            title={`${toggle.label} (${MAC ? "⌃⌘S" : "Ctrl+\\"})`} aria-keyshortcuts={MAC ? "Control+Meta+S Meta+\\" : "Control+\\"}
+            title={withKeys(toggle.label, MAC ? "⌃⌘S" : "Ctrl+\\")} aria-keyshortcuts={MAC ? "Control+Meta+S Meta+\\" : "Control+\\"}
             onClick={(e) => toggle.onToggle(e.currentTarget)} />
         )}
-        <span className="el-titlerow__history" role="group" aria-label="History">
-          <Button size="sm" variant="quiet" icon={Icons.ChevronStartIcon} directional aria-label="Back" title={`Back (${MAC ? "⌘[" : "Alt+←"})`}
+        <span className="el-titlerow__history" role="group" aria-label={t("History")}>
+          <Button size="sm" variant="quiet" icon={Icons.ChevronStartIcon} directional aria-label={t("Back")} title={t("Back (:keys)", { keys: MAC ? "⌘[" : "Alt+←" })}
             aria-keyshortcuts={MAC ? "Meta+[" : "Alt+ArrowLeft Control+["} disabled={!back} onClick={() => back?.()} />
-          <Button size="sm" variant="quiet" icon={Icons.ChevronEndIcon} directional aria-label="Forward" title={`Forward (${MAC ? "⌘]" : "Alt+→"})`}
+          <Button size="sm" variant="quiet" icon={Icons.ChevronEndIcon} directional aria-label={t("Forward")} title={t("Forward (:keys)", { keys: MAC ? "⌘]" : "Alt+→" })}
             aria-keyshortcuts={MAC ? "Meta+]" : "Alt+ArrowRight Control+]"} disabled={!forward} onClick={() => forward?.()} />
         </span>
         {title && (
@@ -237,25 +248,25 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
       <div className="el-titlerow__middle">
         {!fieldShown && narrow ? (
           // Narrow: "Search" (⌘F) opens the field across the row; without a search of the page's own, everything's (⌘K).
-          <Button ref={findButton} size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label={SHORT_WORDS} title={`${SHORT_WORDS} (${FIND_KEYS})`}
+          <Button ref={findButton} size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label={shortWords} title={withKeys(shortWords, FIND_KEYS)}
             aria-keyshortcuts="Meta+F Control+F" onClick={() => (search ? setOpen(true) : everything(""))} />
         ) : !fieldShown ? (
           // No room beside the whole title: the ⌕ button opens the page's search across the row (⌘F), else everything's (⌘K).
-          <Button ref={findButton} size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label={words} title={`${words} (${search ? FIND_KEYS : everyKeys})`}
+          <Button ref={findButton} size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label={words} title={withKeys(words, search ? FIND_KEYS : everyKeys)}
             aria-keyshortcuts={search ? "Meta+F Control+F" : "Meta+K Control+K"} onClick={() => (search ? setOpen(true) : everything(""))} />
         ) : search ? (
           <div className="el-titlerow__search" role="search" data-tauri-drag-region="false">
             <Icon icon={Icons.SearchIcon} />
             {shownScope && (
               <span className="el-titlerow__scope">
-                <span dir="auto">In: {search.scope}</span>
-                <button type="button" className="el-titlerow__unscope" aria-label="Search everything instead" title={`Search everything (${everyKeys})`}
+                <span dir={scopeDir}>{scopeWords}</span>
+                <button type="button" className="el-titlerow__unscope" aria-label={t("Search everything instead")} title={t("Search everything (:keys)", { keys: everyKeys })}
                   onMouseDown={(e) => e.preventDefault()} onClick={() => everything(draft)}>
                   <Icon icon={Icons.CloseIcon} />
                 </button>
               </span>
             )}
-            <input ref={field} type="search" className="el-titlerow__field" aria-label={search.placeholder} placeholder={short ? SHORT_WORDS : search.placeholder} value={draft} dir="auto"
+            <input ref={field} type="search" className="el-titlerow__field" aria-label={search.placeholder} placeholder={short ? shortWords : search.placeholder} value={draft} dir="auto"
               aria-keyshortcuts="Meta+F Control+F"
               onChange={(e) => {
                 type(e.target.value);
@@ -288,9 +299,9 @@ export function TitleRow({ place, title, toggle, back, forward, onEverything, fi
           </div>
         ) : (
           <button type="button" className="el-titlerow__search el-titlerow__search--button" data-tauri-drag-region="false" aria-keyshortcuts="Meta+K Control+K" aria-label={words}
-            title={`${words} (${everyKeys})`} onClick={() => everything("")}>
+            title={withKeys(words, everyKeys)} onClick={() => everything("")}>
             <Icon icon={Icons.SearchIcon} />
-            <span className="el-titlerow__placeholder">{short ? SHORT_WORDS : words}</span>
+            <span className="el-titlerow__placeholder">{short ? shortWords : words}</span>
             <kbd className="el-titlerow__keys" dir="ltr" data-keys={everyKeys} aria-hidden="true" />
           </button>
         )}

@@ -60,7 +60,7 @@ try {
     page.setDefaultTimeout(120_000);
     await asComputer(page, platform);
     await page.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${FLAGS},v21_urdu${where}&theme=light&applang=ur`);
-    await page.getByRole("navigation", { name: "Main" }).waitFor();
+    await page.locator('nav[data-nav="main"]').waitFor();
     await page.waitForFunction(() => document.documentElement.dir === "rtl", null, { timeout: 30_000 }).catch(() => undefined);
     await page.waitForTimeout(1000);
 
@@ -86,7 +86,7 @@ try {
     };
 
     // The rail, a place's tooltip with its key (after the tooltip's delay).
-    const rail = page.getByRole("navigation", { name: "Main" });
+    const rail = page.locator('nav[data-nav="main"]');
     await rail.getByRole("button", { name: "پروجیکٹس" }).hover();
     await page.waitForTimeout(900);
     await shot("rail", "پروجیکٹس", { pointer: true });

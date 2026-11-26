@@ -49,7 +49,7 @@ import { enterView, isConfirmation, MotionGroup, viewDirection } from "../../lib
 import { SuccessCheck } from "../../components/SuccessCheck";
 import type { Account, OneSided } from "../../lib/ipc";
 import { call as accountCall, failureText, replyText } from "../../lib/account";
-import { t, useLanguage, type Lang } from "../../i18n";
+import { t, useLanguage, wordsIn, type Lang } from "../../i18n";
 import { accountLanguage, useFollowLanguage } from "../../i18n/language";
 import { isLocked, lowestPlan, planName, OPEN_SECTION_EVENT, forgetEntitlements, openRequest as openUpgradeRequest, openUpgradeSheet, plansAbove, refreshEntitlements, useEntitlements } from "../../lib/entitlements";
 import { UpgradeSheet } from "./Upgrade";
@@ -1179,21 +1179,28 @@ export default function MainApp() {
   const pageWidth = windowWidth - (collapsed ? SIDEBAR_RAIL : sidebarWidth);
   // While the server holds the queue (v1.6, P2.7) the recordings wait; they are not on their way.
   const waitingFor = status.server?.waiting === "maintenance" ? "the server is in maintenance" : status.server?.waiting === "update_required" ? "update EchoLedger" : null;
-  const uploading = status.pendingUploads === 0 ? null
-    : waitingFor ? `${status.pendingUploads === 1 ? "1 recording waits" : `${status.pendingUploads} recordings wait`}: ${waitingFor}`
-      : status.pendingUploads === 1 ? "Uploading 1 recording…" : `Uploading ${status.pendingUploads} recordings…`;
+  // The uploads' line at the sidebar's foot: the new design's in the window's language (D-255), classic's in English.
+  const uploadingIn = (lang?: Lang) => {
+    const { t: say, tc: count } = wordsIn(lang);
+    return status.pendingUploads === 0 ? null
+      : waitingFor ? count(":count recording waits: :why|:count recordings wait: :why", status.pendingUploads, { why: say(waitingFor) })
+        : count("Uploading :count recording…|Uploading :count recordings…", status.pendingUploads);
+  };
+  const uploading = uploadingIn("en");
   // The new sidebar's workspace menu (classic's top bar switcher): Invite people for an owner or admin, or with the
   // plan's name when the plan leaves teams out; the rest is in the browser.
   const workspaceList = workspacesOf(account, status);
   const workspaceHere = workspaceList.find((w) => w.current) ?? workspaceList[0];
   const teamLocked = isLocked(entitlements, "team");
   const openWorkspaces = () => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true));
-  const roleWord = (role: string | null) => (role && role in ROLE_LABEL ? ROLE_LABEL[role as keyof typeof ROLE_LABEL] : null);
+  // The new shell's words (D-255): a role and a locked plan in the window's language, a plan's name as it is.
+  const roleWord = (role: string | null) => (role && role in ROLE_LABEL ? t(ROLE_LABEL[role as keyof typeof ROLE_LABEL]) : null);
+  const lockedPlan = planName(lowestPlan(entitlements, "team"));
   const shellWorkspace = account === undefined ? null : {
     name: workspaceHere.name,
     role: roleWord(workspaceHere.role),
     others: workspaceList.filter((w) => w !== workspaceHere).map((w) => ({ key: w.key, name: w.name, role: roleWord(w.role) })),
-    invite: teamLocked ? { locked: `in ${planName(lowestPlan(entitlements, "team")) || "a paid plan"}`, onPick: () => openUpgradeSheet("team") }
+    invite: teamLocked ? { locked: lockedPlan ? t("in :plan", { plan: lockedPlan }) : t("in a paid plan"), onPick: () => openUpgradeSheet("team") }
       : workspaceHere.role === "owner" || workspaceHere.role === "admin" ? { locked: null, onPick: openWorkspaces } : null,
     onManage: openWorkspaces,
   };
@@ -1426,8 +1433,8 @@ export default function MainApp() {
         {!ui.flags["ui_v2.library"] && <div className="el-titlebar" data-tauri-drag-region aria-hidden="true" data-testid="titlebar-strip" />}
         {!ui.flags["ui_v2.library"] && <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />}
         <Suspense fallback={null}>
-          <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, (app) => sourceAppLabel(app, "en"))}
-            rail={collapsed} onRail={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} uploading={uploading} uploadsWait={!!waitingFor}
+          <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, (app) => sourceAppLabel(app))}
+            rail={collapsed} onRail={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} uploading={uploadingIn()} uploadsWait={!!waitingFor}
             workspace={shellWorkspace} activity={needsYou} activityTone={activityBadge.tone} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
             onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
             pinnedProjects={(projects ?? []).filter((p) => p.pinned).map((p) => ({ id: p.id, name: p.name }))} projectId={projectId} onProject={(id) => openProject(id)}
@@ -1457,22 +1464,23 @@ export default function MainApp() {
               libraryCount: libraryCounts?.needs || undefined,
               liveDot: !!status.recording || status.captionsLive || status.dictationActive,
               liveDotWords: status.recording ? t("shell_context.live_recording") : status.captionsLive || status.dictationActive ? t("shell_context.live_on") : undefined,
-              setupAttention: shellChip(status, (app) => sourceAppLabel(app, "en")).kind === "setup",
+              setupAttention: shellChip(status, (app) => sourceAppLabel(app)).kind === "setup",
               callRecording: canRecord ? { on: status.autoMode, toggle: toggleAutoRecord } : undefined,
               account: account ? [
                 // Who it is: the menu's own header (DES-08: the avatar, the name, the email, the plan).
-                { label: "Account", icon: Icons.UserIcon, onPick: () => openAccount("profile") },
-                { label: "Plan & usage", icon: Icons.PlanIcon, onPick: () => openAccount("plan") },
-                { label: "Theme", icon: Icons.AppearanceIcon, items: ([["system", "System"], ["light", "Light"], ["dark", "Dark"]] as const).map(([value, label]) => ({ label, radio: true, checked: theme === value, onPick: () => chooseTheme(value) })) },
-                // UX-07: "Zoom  [−] 100% [+]", as Chrome's menu has it, next to Theme.
-                ...(zoomOn ? [{ label: "Zoom", icon: Icons.ZoomIcon, stepper: zoomStepper(zoomLevel) }] : []),
+                // The avatar's menu in the window's language (D-255).
+                { label: t("Account"), icon: Icons.UserIcon, onPick: () => openAccount("profile") },
+                { label: t("Plan & usage"), icon: Icons.PlanIcon, onPick: () => openAccount("plan") },
+                { label: t("Theme"), icon: Icons.AppearanceIcon, items: ([["system", "System"], ["light", "Light"], ["dark", "Dark"]] as const).map(([value, label]) => ({ label: t(label), radio: true, checked: theme === value, onPick: () => chooseTheme(value) })) },
+                // UX-07: "Zoom  [−] 100% [+]", as Chrome's menu has it, next to Theme (the size: not the meeting app's name).
+                ...(zoomOn ? [{ label: t("actions_context.zoom"), icon: Icons.ZoomIcon, stepper: zoomStepper(zoomLevel) }] : []),
                 ...(shellWorkspace ? [
-                  { label: shellWorkspace.role ? `${shellWorkspace.name} · ${shellWorkspace.role}` : shellWorkspace.name, group: "Workspace", disabled: true },
-                  ...(shellWorkspace.invite ? [{ label: shellWorkspace.invite.locked ? `Invite people (${shellWorkspace.invite.locked})` : "Invite people", icon: Icons.UsersIcon, group: "Workspace", onPick: shellWorkspace.invite.onPick }] : []),
-                  { label: "Switch or manage in the browser", icon: Icons.WebIcon, group: "Workspace", onPick: shellWorkspace.onManage },
+                  { label: shellWorkspace.role ? `${shellWorkspace.name} · ${shellWorkspace.role}` : shellWorkspace.name, group: t("Workspace"), disabled: true },
+                  ...(shellWorkspace.invite ? [{ label: shellWorkspace.invite.locked ? t("Invite people (:locked)", { locked: shellWorkspace.invite.locked }) : t("Invite people"), icon: Icons.UsersIcon, group: t("Workspace"), onPick: shellWorkspace.invite.onPick }] : []),
+                  { label: t("Switch or manage in the browser"), icon: Icons.WebIcon, group: t("Workspace"), onPick: shellWorkspace.onManage },
                 ] : []),
-                ...(account.super_admin === true ? [{ label: "Admin panel", icon: Icons.LinkIcon, onPick: () => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true)) }] : []),
-                { label: "Sign out", icon: Icons.SignOutIcon, separator: true, onPick: () => void signOut() },
+                ...(account.super_admin === true ? [{ label: t("Admin panel"), icon: Icons.LinkIcon, onPick: () => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true)) }] : []),
+                { label: t("Sign out"), icon: Icons.SignOutIcon, separator: true, onPick: () => void signOut() },
               ] : undefined,
               panels: {
                 live: <Suspense fallback={null}><LivePanelV2 callRecording={status.autoMode} onCalls={() => openAccount("calls")} onPart={showLivePart} /></Suspense>,
@@ -1491,7 +1499,7 @@ export default function MainApp() {
             places={{
               // Classic's sidebar form: no All, the places that hold something, the Inbox always (it takes drops). Shared
               // with me is Shared's own, under Library.
-              places: places.filter((p) => p.key !== "all" && p.folder !== "shared" && (p.count > 0 || p.drop || p.key === (libraryFolder ?? libraryView))).map((p) => ({ ...p, label: placeWords(p) }))
+              places: places.filter((p) => p.key !== "all" && p.folder !== "shared" && (p.count > 0 || p.drop || p.key === (libraryFolder ?? libraryView))).map((p) => ({ ...p, label: t(placeWords(p)) }))
                 .map((p) => ({ key: p.key, label: p.label, count: p.count, drop: p.drop })),
               current: libraryFolder ?? libraryView ?? null,
               open: (key) => { const p = places.find((x) => x.key === key); if (p) openPlace(p); },

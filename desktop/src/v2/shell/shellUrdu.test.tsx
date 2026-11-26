@@ -5,13 +5,13 @@
 // and plan names stay Latin inside Urdu. English is the shell's and the palette's own tests', unchanged; a few checks
 // here say so too.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import MainApp from "../../views/main/MainApp";
 import { CommandPalette, goToLine, lockedWords, paletteCommands } from "../../views/main/CommandPalette";
 import { NavShell } from "./NavShell";
 import { Shell } from "./Shell";
-import { accountTip, placeList, placeName, PLACE_NAMES, type Place } from "./NavRail";
+import { accountTip, placeList, placeName, RAIL_PLACES, type Place } from "./NavRail";
 import { flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { makeEntitlements, makeSettings, makeStatus, makeRecording, sampleEntitlements } from "../../test/fixtures";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
@@ -130,7 +130,7 @@ describe("the pages MainApp gives the palette, in Urdu", () => {
     setWidth(1440);
     render(<MainApp />);
     for (let i = 0; i < 6; i++) await act(flushAsync);
-    await screen.findByRole("navigation", { name: "Main" }, { timeout: 15_000 });
+    await waitFor(() => expect(document.querySelector('nav[data-nav="main"]')).not.toBeNull(), { timeout: 15_000 });
     for (let i = 0; i < 4; i++) await act(flushAsync);
     fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });
     await act(flushAsync);
@@ -161,7 +161,8 @@ describe("the shell in Urdu", () => {
       </NavShell>
     );
   }
-  const rail = () => within(screen.getByRole("navigation", { name: "Main" }));
+  // The rail, by its name in Urdu (مرکزی).
+  const rail = () => within(screen.getByRole("navigation", { name: "مرکزی" }));
 
   it("the rail: Record, the places, Setup, Help, Settings and the account, their names and labels in Urdu", async () => {
     await urdu();
@@ -206,7 +207,7 @@ describe("the shell in Urdu", () => {
     await urdu();
     render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onRecord={() => undefined} onUpload={() => undefined}
       onVoiceNote={() => undefined} onNewProject={() => undefined} onRequestLink={() => undefined}><p /></Shell>);
-    const nav = screen.getByRole("navigation", { name: "Main" });
+    const nav = screen.getByRole("navigation", { name: "مرکزی" });
     const group = within(nav).getByRole("group", { name: "ریکارڈ" });
     expect(within(group).getByRole("button", { name: "ریکارڈ" })).toBeInTheDocument();
     fireEvent.click(within(group).getByRole("button", { name: "ریکارڈ کرنے کے مزید طریقے" }));
@@ -219,7 +220,7 @@ describe("the shell in Urdu", () => {
   it("the places as a phrase and the avatar's tooltip, in Urdu; English as before", async () => {
     expect([placeList(["library", "projects", "activity"]), accountTip(["live", "ask"], true), accountTip([])])
       .toEqual(["Library, Projects and Activity", "Live and Ask; account, theme and settings, something failed", "Account, theme and settings"]);
-    expect(Object.values(PLACE_NAMES)).toEqual(["Library", "Projects", "Live", "Ask", "Activity", "Settings"]);
+    expect(RAIL_PLACES.map(placeName)).toEqual(["Library", "Projects", "Live", "Ask", "Activity", "Settings"]);
     await urdu();
     expect(stripIsolates(placeList(["library", "projects", "activity"]))).toBe("لائبریری، پروجیکٹس اور سرگرمی");
     expect(stripIsolates(accountTip(["live", "ask"], true))).toBe("لائیو اور پوچھیں؛ اکاؤنٹ، تھیم اور ترتیبات، کچھ ناکام ہوا");

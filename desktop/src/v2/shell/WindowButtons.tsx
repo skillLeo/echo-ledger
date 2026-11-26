@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Icon, Icons } from "../components";
 import { useZoom, ZOOM_DEFAULT } from "../../lib/zoom";
+import { t } from "../../i18n";
 
 /** The snap layout plugin's own script's handle on its window (none before the plugin is in the app). */
 type SnapLayout = { attach: (id?: string) => void; detach: () => Promise<void> | void };
@@ -49,16 +50,17 @@ export function WindowButtons() {
       void off.then((stop) => stop(), () => undefined);
     };
   }, []);
-  const restore = maximized ? "Restore Down" : "Maximize";
+  // Windows' own words for its caption buttons, in the window's language (D-255).
+  const restore = maximized ? t("Restore Down") : t("Maximize");
   return (
-    <div className="el-winbuttons" role="group" aria-label="Window" data-tauri-drag-region="false" data-testid="window-buttons">
-      <button type="button" className="el-winbutton" tabIndex={-1} aria-label="Minimize" title="Minimize" onClick={() => void getCurrentWindow().minimize()}>
+    <div className="el-winbuttons" role="group" aria-label={t("Window")} data-tauri-drag-region="false" data-testid="window-buttons">
+      <button type="button" className="el-winbutton" tabIndex={-1} aria-label={t("Minimize")} title={t("Minimize")} onClick={() => void getCurrentWindow().minimize()}>
         <Icon icon={Icons.WindowMinimizeIcon} />
       </button>
       <button type="button" id={MAXIMIZE_ID} className="el-winbutton" tabIndex={-1} aria-label={restore} title={restore} onClick={() => void getCurrentWindow().toggleMaximize()}>
         <Icon icon={maximized ? Icons.WindowRestoreIcon : Icons.WindowMaximizeIcon} />
       </button>
-      <button type="button" className="el-winbutton el-winbutton--close" tabIndex={-1} aria-label="Close" title="Close" onClick={() => void getCurrentWindow().close()}>
+      <button type="button" className="el-winbutton el-winbutton--close" tabIndex={-1} aria-label={t("Close")} title={t("Close")} onClick={() => void getCurrentWindow().close()}>
         <Icon icon={Icons.CloseIcon} />
       </button>
     </div>

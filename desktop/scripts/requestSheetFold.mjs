@@ -29,7 +29,7 @@ try {
         const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });
         page.setDefaultTimeout(120_000);
         await page.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${FLAGS},v21_urdu${where}&applang=${lang}`);
-        await page.getByRole("navigation", { name: "Main" }).waitFor();
+        await page.locator('nav[data-nav="main"]').waitFor();
         await page.waitForTimeout(1200);
         // Shared, from the Library panel; then New request link (the first button there named so, in either language).
         await page.getByRole("button", { name: /^(شیئر شدہ|Shared)$/ }).first().click();
