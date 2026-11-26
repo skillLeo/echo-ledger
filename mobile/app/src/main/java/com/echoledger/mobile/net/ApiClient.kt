@@ -724,6 +724,19 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         call(request("sessions/$id").patch(body).build(), null as KSerializer<Unit>?)
     }
 
+    /**
+     * `PATCH /api/sessions/{id}` with the end of a call (contract 2.0.0-z): `ended_at` (ISO 8601 UTC) and `duration_ms`, so
+     * every device shows it waiting at once. The server keeps the first one (a retry is safe); an older one answers 200
+     * and stores nothing.
+     */
+    suspend fun endCall(sessionId: String, endedAt: String, durationMs: Long) {
+        val body = buildJsonObject {
+            put("ended_at", endedAt)
+            put("duration_ms", durationMs)
+        }.toString().toRequestBody(jsonType)
+        call(request("sessions/$sessionId").patch(body).build(), null as KSerializer<Unit>?)
+    }
+
     // ---- Lists (contract 2.0.0-m) ----------------------------------------------------------------------------------
 
     private fun listPath(key: String) = "lists/" + java.net.URLEncoder.encode(key, "UTF-8").replace("+", "%20")
@@ -1317,6 +1330,10 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     /** `PATCH /api/account {"name"}`: the account as it is now. */
     suspend fun updateName(name: String): com.echoledger.mobile.data.AccountDto =
         call(request("account").patch(jsonBody { put("name", name.trim()) }).build(), com.echoledger.mobile.data.AccountDto.serializer())!!
+
+    /** `PATCH /api/account {language}` (BE-06): the account's language, `en` or `ur`, for every device. */
+    suspend fun updateLanguage(language: String): com.echoledger.mobile.data.AccountDto =
+        call(request("account").patch(jsonBody { put("language", language) }).build(), com.echoledger.mobile.data.AccountDto.serializer())!!
 
     /** `POST /api/account/avatar`, multipart `image` (a JPEG made on the phone, at most 5 MB). */
     suspend fun uploadAvatar(jpeg: ByteArray): com.echoledger.mobile.data.AvatarDto {

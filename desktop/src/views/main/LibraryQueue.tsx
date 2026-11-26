@@ -4,12 +4,11 @@ import { MAIN_LANGUAGES, MORE_LANGUAGES, languageLabel, learnPrompt, menuLabel, 
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
 import { fillWidth } from "../../lib/motion";
 import {
-  DELETE_WAITING_QUESTION,
-  DISCARD_QUESTION,
   bulkNotice,
   deleteWaitingQuestion,
   deletedNotice,
   discardAllQuestion,
+  discardQuestion,
   failedUploads,
   heldLine,
   heldUploads,
@@ -23,9 +22,10 @@ import {
   waitingSummary,
 } from "../../lib/pending";
 import { AlertIcon, AppTileIcon, HourglassIcon, ImportIcon, appKind } from "../../components/Icons";
-import { NO_TARGET, type Notify } from "../../lib/notice";
+import { NO_TARGET, type NoticeTarget, type Notify } from "../../lib/notice";
 import { confirmAction } from "../../lib/confirm";
 import { CALL_WORDS } from "../../lib/callChoice";
+import { wordsIn, type Lang } from "../../i18n";
 
 /** The closed language chip's words (D-038): the language's short name, "Auto" when none is chosen. */
 function shortLanguage(value: LanguageChoice | undefined): string {
@@ -58,12 +58,17 @@ const meta = (sourceApp: string, startedAt: string, durationMs: number, extra?: 
  * list. A recording whose chip still counts down is not listed. Since v1.5 recordings made while another account was
  * signed in here wait for that account, with Discard.
  */
+/** Where the notice after a call is transcribed or saved as audio leads: the Library, where it shows. */
+const IN_LIBRARY: NoticeTarget = { kind: "library", view: null };
+
 /**
  * The waiting recordings and the uploads of the top of the Library, with every command they take: one source for the
  * classic list below and the v2 Library's (v2/library/QueueV2.tsx). The lists come from the core and follow its
- * `pending:changed` / `uploads:changed` events.
+ * `pending:changed` / `uploads:changed` events. Its questions and notices are in `lang`: the window's language for the
+ * v2 Library (the default), English ("en") for the classic list, which keeps exactly the English it always had.
  */
-export function useLibraryQueue(notify: Notify) {
+export function useLibraryQueue(notify: Notify, lang?: Lang) {
+  const { t } = wordsIn(lang);
   const [all, setPending] = useState<PendingItem[]>([]);
   const pending = useMemo(() => waitingItems(all), [all]);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
@@ -110,13 +115,15 @@ export function useLibraryQueue(notify: Notify) {
     return () => subs.forEach((p) => p.then((f) => f()).catch(() => undefined));
   }, [reloadPending, reloadUploads]);
 
-  /** Runs one command for an item; on failure reports the core's message and re-reads both lists. */
-  const perform = async (id: string, fn: () => Promise<unknown>, ok?: string): Promise<boolean> => {
+  /**
+   * Runs one command for an item; on success says `ok` (where `target` leads: nowhere when none is given), on failure
+   * reports the core's message and re-reads both lists.
+   */
+  const perform = async (id: string, fn: () => Promise<unknown>, ok?: string, target?: NoticeTarget): Promise<boolean> => {
     setBusy(id);
     try {
       await fn();
-      // Calls being transcribed or saved as audio go up and show in the Library.
-      if (ok) notify(ok, false, /^(Transcribing|Saved)/.test(ok) ? { kind: "library", view: null } : NO_TARGET);
+      if (ok) notify(ok, false, target);
       return true;
     } catch (e) {
       notify(errorMessage(e), true);
@@ -134,12 +141,13 @@ export function useLibraryQueue(notify: Notify) {
   };
 
   const keep = async (item: PendingItem) => {
-    if (await perform(item.id, () => api.pendingKeep(item.id), "Transcribing…")) drop(item.id);
+    // Calls being transcribed or saved as audio go up and show in the Library.
+    if (await perform(item.id, () => api.pendingKeep(item.id), t("Transcribing…"), IN_LIBRARY)) drop(item.id);
   };
 
   /** "Save audio only": kept and uploaded as audio, not transcribed; it can be transcribed later from the Library. */
   const keepAudio = async (item: PendingItem) => {
-    if (await perform(item.id, () => api.pendingKeepAudio(item.id), "Saved as audio")) drop(item.id);
+    if (await perform(item.id, () => api.pendingKeepAudio(item.id), t("Saved as audio"), IN_LIBRARY)) drop(item.id);
   };
 
   /** Delete and Delete all: gone from the list now, deleted only once "Deleted · Undo" has had its time; Undo puts them
@@ -149,7 +157,7 @@ export function useLibraryQueue(notify: Notify) {
     try {
       const count = await api.pendingDelete(ids);
       setPending((list) => list.filter((i) => !ids.includes(i.id)));
-      notify(deletedNotice(count, "en"), false, { kind: "action", run: () => {
+      notify(deletedNotice(count, lang), false, { kind: "action", run: () => {
         api.pendingDeleteUndo(ids).then(() => reloadPending(), (e) => notify(errorMessage(e), true));
       } });
     } catch (e) {
@@ -161,7 +169,7 @@ export function useLibraryQueue(notify: Notify) {
   };
 
   const discard = async (item: PendingItem) => {
-    if (!(await confirmAction(DELETE_WAITING_QUESTION))) return;
+    if (!(await confirmAction(deleteWaitingQuestion(1, lang)))) return;
     await deleteLater([item.id]);
   };
 
@@ -181,7 +189,7 @@ export function useLibraryQueue(notify: Notify) {
     } finally {
       setBulkBusy(false);
     }
-    if (done > 0) notify(bulkNotice(verb, done, "en"), false, { kind: "library", view: null });
+    if (done > 0) notify(bulkNotice(verb, done, lang), false, IN_LIBRARY);
   };
 
   const keepAll = () => decideAll("Transcribing", (id) => api.pendingKeep(id));
@@ -189,7 +197,7 @@ export function useLibraryQueue(notify: Notify) {
 
   const discardAll = async () => {
     const ids = pending.map((i) => i.id);
-    if (!(await confirmAction(deleteWaitingQuestion(ids.length, "en")))) return;
+    if (!(await confirmAction(deleteWaitingQuestion(ids.length, lang)))) return;
     await deleteLater(ids);
   };
 
@@ -232,14 +240,15 @@ export function useLibraryQueue(notify: Notify) {
     replace(updated);
     if (!item.clientId) return;
     const client = (await api.clients().catch(() => null))?.data.find((c) => c.id === item.clientId);
-    const question = client ? learnPrompt(client.name, client.language, language, "en") : null;
+    const question = client ? learnPrompt(client.name, client.language, language, lang) : null;
     setLearn(question && client ? { itemId: item.id, clientId: client.id, question, language } : null);
   };
 
   const answerLearn = async (yes: boolean) => {
     const asked = learn;
     setLearn(null);
-    if (yes && asked) await perform(asked.itemId, () => api.updateClient(asked.clientId, { language: asked.language }), "Saved for this project");
+    // It leads to the Library, as it always has.
+    if (yes && asked) await perform(asked.itemId, () => api.updateClient(asked.clientId, { language: asked.language }), t("Saved for this project"), IN_LIBRARY);
   };
 
   const retry = async (item: UploadItem) => {
@@ -250,13 +259,13 @@ export function useLibraryQueue(notify: Notify) {
 
   const discardUpload = async (item: UploadItem) => {
     // An imported file is still on the computer where it came from, so only a recording made here is asked about.
-    if (!item.imported && !(await confirmAction(DISCARD_QUESTION))) return;
-    if (await perform(item.id, () => api.uploadDiscard(item.id), "Discarded")) setUploads((list) => list.filter((i) => i.id !== item.id));
+    if (!item.imported && !(await confirmAction(discardQuestion(lang)))) return;
+    if (await perform(item.id, () => api.uploadDiscard(item.id), t("Discarded"))) setUploads((list) => list.filter((i) => i.id !== item.id));
   };
 
   /** Every recording that waits for one account, after one confirmation. */
   const discardHeld = async (items: UploadItem[]) => {
-    if (!(await confirmAction(discardAllQuestion(items.length, "en")))) return;
+    if (!(await confirmAction(discardAllQuestion(items.length, lang)))) return;
     setBulkBusy(true);
     let done = 0;
     try {
@@ -269,11 +278,11 @@ export function useLibraryQueue(notify: Notify) {
     } finally {
       setBulkBusy(false);
     }
-    if (done > 0) notify(bulkNotice("Discarded", done, "en"), false, NO_TARGET);
+    if (done > 0) notify(bulkNotice("Discarded", done, lang), false, NO_TARGET);
   };
 
   const cancelImport = async (item: UploadItem) => {
-    if (await perform(item.id, () => api.uploadDiscard(item.id), "Import cancelled")) setUploads((list) => list.filter((i) => i.id !== item.id));
+    if (await perform(item.id, () => api.uploadDiscard(item.id), t("Import cancelled"))) setUploads((list) => list.filter((i) => i.id !== item.id));
   };
 
   const failed = failedUploads(uploads);
@@ -292,7 +301,7 @@ export function useLibraryQueue(notify: Notify) {
 export type LibraryQueueState = ReturnType<typeof useLibraryQueue>;
 
 export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify; focus?: PendingFocus | null; onFocusHandled?: () => void }) {
-  const q = useLibraryQueue(notify);
+  const q = useLibraryQueue(notify, "en");
   const { pending, clients, busy, bulkBusy, learn, pendingLoads, reloadPending, failed, verifying, importing, held, keepAudio, keepAudioAll } = q;
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);

@@ -42,7 +42,7 @@ export function ImportSheet({ paths, notify, onClose }: {
     try {
       // Every path goes to the core, which decides what can be imported and counts the rest.
       const summary = await api.importVoiceNotes(paths, clientId || null, (language || null) as TranscriptionLanguage | null);
-      notify(importNotice(summary), summary.queued === 0 && summary.duplicates === 0, summary.queued > 0 ? { kind: "page", page: "activity" } : NO_TARGET);
+      notify(importNotice(summary, "en"), summary.queued === 0 && summary.duplicates === 0, summary.queued > 0 ? { kind: "page", page: "activity" } : NO_TARGET);
       onClose();
     } catch (e) {
       notify(errorMessage(e), true);

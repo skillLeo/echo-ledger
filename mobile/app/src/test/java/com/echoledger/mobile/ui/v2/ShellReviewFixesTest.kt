@@ -325,7 +325,8 @@ class ShellReviewFixesTest : ScreenTest() {
         pumpUntil("larger") { vm.settings.value.textSize == "larger" }
         compose.waitForIdle()
         compose.onNodeWithText("Text size").assertExists()
-        vm.updateSettings { it.copy(appLanguage = "ur") }
+        // Signed in, the account's language (BE-06).
+        vm.updateSettings { it.copy(appLanguage = "ur", accountLanguage = "ur") }
         pumpUntil("Urdu") { vm.settings.value.appLanguage == "ur" }
         compose.waitForIdle()
         // Still Appearance, now in Urdu; not back on Library.
@@ -343,7 +344,8 @@ class ShellReviewFixesTest : ScreenTest() {
     @Test
     fun theRecordSheetAndADialogUseTheAppLanguageAndTextSizeOnAnEnglishPhone() {
         seed()
-        vm.updateSettings { it.copy(appLanguage = "ur", textSize = "largest") }
+        // Signed in, the account's language (BE-06).
+        vm.updateSettings { it.copy(appLanguage = "ur", accountLanguage = "ur", textSize = "largest") }
         pumpUntil("set") { vm.settings.value.textSize == "largest" }
         shell()
         rows()

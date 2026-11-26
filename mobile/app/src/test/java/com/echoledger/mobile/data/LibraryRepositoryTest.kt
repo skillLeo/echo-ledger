@@ -214,6 +214,25 @@ class LibraryRepositoryTest : AppTest() {
     }
 
     /**
+     * Contract 2.0.0-z: of the server's `recording` sessions only the calls that are over are waiting (ended_at, or
+     * started more than 4 hours ago); a call still being recorded on another device stays out of Needs you.
+     */
+    @Test
+    fun `a call still being recorded elsewhere is not one of the waiting calls`() = runBlocking {
+        val repo = repository()
+        val now = java.time.Instant.parse("2026-11-23T10:00:00Z")
+        fun call(id: String, startedAt: String) =
+            ServerFixtures.libraryItem(id, title = id, status = "recording", finalStatus = null, startedAt = startedAt)
+        val over = call("over", "2026-11-23T09:55:00+00:00")
+        val live = call("live", "2026-11-23T09:57:00+00:00")
+            .replace("\"ended_at\":\"2026-10-20T10:42:10+00:00\"", "\"ended_at\":null")
+        assertTrue("the live call has no end", "\"ended_at\":null" in live)
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(over, live))))
+        repo.refreshWaiting(now)
+        assertEquals(listOf("over"), repo.waiting.value.map { it.id })
+    }
+
+    /**
      * The calls still waiting for Keep or Discard (status recording), which a sync leaves out, are read beside it with
      * `status=recording`, every page, in place of the ones before; they are kept in the cache and go on sign-out.
      */

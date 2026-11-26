@@ -878,10 +878,21 @@ private fun ClientKeytermsCard(vm: MainViewModel, settings: AppSettings) {
     SectionCard {
         Text("Project keyterms", fontWeight = FontWeight.SemiBold)
         Text("Names and jargon of the selected project improve accuracy.", color = Brand.Muted, fontSize = 12.sp)
-        (listOf(null) + clients).forEach { client ->
-            Row(Modifier.fillMaxWidth().clickable { vm.updateSettings { it.copy(clientId = client?.id) } }.padding(vertical = 6.dp)) {
-                Text(if (settings.clientId == client?.id) "●  " else "○  ", color = Brand.Violet)
-                Text(client?.name ?: "No project")
+        // P-052: radios TalkBack hears as such, with which one is chosen, each a full 48 dp row ("●"/"○" were text).
+        Column(Modifier.selectableGroup()) {
+            (listOf(null) + clients).forEach { client ->
+                val chosen = settings.clientId == client?.id
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
+                        selected = chosen,
+                        role = Role.RadioButton,
+                        onClick = { vm.updateSettings { it.copy(clientId = client?.id) } }
+                    ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(selected = chosen, onClick = null)
+                    Text(client?.name ?: "No project", Modifier.padding(start = Space.s2))
+                }
             }
         }
     }

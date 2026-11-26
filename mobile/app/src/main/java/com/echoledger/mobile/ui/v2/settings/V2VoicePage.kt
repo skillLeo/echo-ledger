@@ -285,7 +285,9 @@ private fun History(history: DictationHistory) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    com.echoledger.mobile.ui.v2.library.LibraryModel.latinDigits(com.echoledger.mobile.ui.formatWhen(entry.at)),
+                    com.echoledger.mobile.ui.v2.library.LibraryModel.latinDigits(
+                        com.echoledger.mobile.ui.formatWhen(entry.at, locale = com.echoledger.mobile.ui.v2.account.appLocale())
+                    ),
                     style = EchoV2.type.mono,
                     color = c.textSecondary
                 )

@@ -45,7 +45,7 @@ it('reads More\'s Send to a teammate, Sent to and WhatsApp in Urdu, and Share\'s
     $page = sharingPage($this, 'ur');
     $page->assertActionExists('send', fn (Action $a): bool => $a->getLabel() === 'ساتھی کو بھیجیں')
         ->assertActionExists('sentTo', fn (Action $a): bool => $a->getLabel() === 'کس کو بھیجا')
-        ->assertActionExists('whatsapp', fn (Action $a): bool => $a->getLabel() === 'واٹس ایپ' && $a->getModalHeading() === 'واٹس ایپ پر بھیجیں')
+        ->assertActionExists('whatsapp', fn (Action $a): bool => $a->getLabel() === 'WhatsApp' && $a->getModalHeading() === 'WhatsApp پر بھیجیں')
         ->assertActionExists('share', fn (Action $a): bool => $a->getModalHeading() === 'یہ ریکارڈنگ شیئر کریں' && $a->getModalSubmitActionLabel() === 'لنک بنائیں');
 
     $page->callAction('share', data: ['audience' => 'public', 'expires' => '604800'])

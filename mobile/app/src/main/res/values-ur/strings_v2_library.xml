@@ -117,7 +117,7 @@
         <item quantity="one">آڈیو · %d دن باقی</item>
         <item quantity="other">آڈیو · %d دن باقی</item>
     </plurals>
-    <string name="v2_lib_row_failed">ٹرانسکرپشن ناکام · دوبارہ کوشش کے لیے ٹیپ کریں</string>
+    <string name="v2_lib_row_failed">ٹرانسکرپشن ناکام · وجہ جاننے کے لیے ٹیپ کریں</string>
     <string name="v2_lib_row_no_audio">کوئی آواز نہیں</string>
     <string name="v2_lib_not_opened">ابھی کھولی نہیں گئی</string>
     <!-- Contract 2.0.0-y: پڑھی ہوئی / نہ پڑھی گئی، انتخاب، ان پڑھی کی "سب کو پڑھی ہوئی کریں" اور ایک ریکارڈنگ۔ -->

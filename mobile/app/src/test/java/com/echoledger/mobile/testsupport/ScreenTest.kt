@@ -41,6 +41,18 @@ abstract class ScreenTest : AppTest() {
         compose.setContent { EchoLedgerTheme { if (showing) content() } }
     }
 
+    /**
+     * The account's language for screens drawn in the shell (BE-06): signed in, the phone speaks the account's, never
+     * the phone's own, so a test that draws a signed-in shell in Urdu sets it as the server would.
+     */
+    protected fun speak(language: com.echoledger.mobile.ui.v2.theme.EchoLanguage) {
+        val code = if (language == com.echoledger.mobile.ui.v2.theme.EchoLanguage.Urdu) "ur" else "en"
+        // Through the view model, with the main thread pumped: a blocking write on the main thread could wait for one of
+        // the shell's own (which go on the main thread) and never end.
+        vm.updateSettings { it.copy(accountLanguage = code) }
+        pumpUntil("speaking $code") { vm.settings.value.accountLanguage == code }
+    }
+
     /** Removes the screen before the app is released, so its effects (transcript and playback requests) stop with the test. */
     @After
     fun closeScreen() {

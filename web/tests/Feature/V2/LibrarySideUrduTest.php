@@ -170,7 +170,7 @@ dataset('search states', [
     ]],
     'with results' => ['/app/search?q=proforma', null, [
         // The date in Urdu reads day, month, year (ConsoleDates); the app in the console's language.
-        '17 نومبر 2026 · 9:00 صبح · واٹس ایپ', 'Nov 17, 2026 · 9:00 AM · WhatsApp',
+        '17 نومبر 2026 · 9:00 صبح · WhatsApp', 'Nov 17, 2026 · 9:00 AM · WhatsApp',
         'aria-label="Payment terms for the March shipment کو 0:00 سے چلائیں"', 'aria-label="Play Payment terms for the March shipment from 0:00"',
     ]],
     'without results' => ['/app/search?q=zebra+crossing', null, [

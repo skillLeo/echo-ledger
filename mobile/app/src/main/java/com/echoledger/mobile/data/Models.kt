@@ -569,10 +569,17 @@ data class SavedViewDeleted(val id: String? = null, @SerialName("views_version")
 
 /**
  * A library item's `facets` (contract 2.0.0-p): the apps count with these instead of working them out again. [kind] (since
- * 2.0.0-q): `call`, `meeting`, `voice_note` or `other` ("The Library's kinds").
+ * 2.0.0-q): `call`, `meeting`, `voice_note` or `other` ("The Library's kinds"). [state] (since 2.0.0-r): its state in
+ * the glossary's words (`waiting`, `waiting_to_upload`…), which decides whether a call is waiting (2.0.0-z).
  */
 @Serializable
-data class ItemFacetsDto(val source: String? = null, val status: String? = null, val language: String? = null, val kind: String? = null)
+data class ItemFacetsDto(
+    val source: String? = null,
+    val status: String? = null,
+    val language: String? = null,
+    val kind: String? = null,
+    val state: String? = null
+)
 
 @Serializable
 data class NamedRef(val id: String, val name: String, val color: String? = null, val avatar: String? = null)
@@ -1290,7 +1297,11 @@ data class AccountDto(
     @SerialName("pending_email") val pendingEmail: String? = null,
     @SerialName("pending_email_expires_at") val pendingEmailExpiresAt: String? = null,
     /** False when this server is not set up for phone passkeys: they are managed on the website. */
-    @SerialName("passkeys_available") val passkeysAvailable: Boolean = false
+    @SerialName("passkeys_available") val passkeysAvailable: Boolean = false,
+    /** The account's language, the same on every device (BE-06): `en` or `ur`; the phone speaks it while signed in. */
+    val language: String? = null,
+    /** The initials circle's colour, 0-7 (role.avatar), picked once by the server (BE-06, DES-08). */
+    @SerialName("avatar_color") val avatarColor: Int? = null
 )
 
 @Serializable

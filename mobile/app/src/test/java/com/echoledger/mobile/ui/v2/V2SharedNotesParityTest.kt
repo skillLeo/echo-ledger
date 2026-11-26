@@ -120,6 +120,8 @@ class V2SharedNotesParityTest : ScreenTest() {
         app.storeRecording(id = "note-1", state = "queued", sourceApp = "voice_note")
         vm.reloadLocal()
         SharedNotes.remember(app, listOf("note-1"))
+        // Signed in, the account's language (BE-06), never the phone's.
+        speak(EchoLanguage.Urdu)
         page(listOf("note-1"), EchoLanguage.Urdu)
         pumpUntil("the Urdu stage") { seen("اپ لوڈ کا انتظار…") }
         assertTrue(seen("پس منظر میں جاری رکھیں"))

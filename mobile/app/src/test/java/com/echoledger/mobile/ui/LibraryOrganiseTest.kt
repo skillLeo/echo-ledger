@@ -43,13 +43,15 @@ class LibraryOrganiseTest : ScreenTest() {
         markers: Int = 0,
         client: NamedRef? = null,
         finalStatus: String? = "completed",
-        deleted: Boolean = false
+        deleted: Boolean = false,
+        endedAt: String? = null
     ) = LibraryItem(
         id = id,
         deleted = deleted,
         client = client,
         title = id,
         startedAt = startedAt,
+        endedAt = endedAt,
         status = status,
         transcript = TranscriptSummary(finalStatus = finalStatus),
         updatedAt = "2026-10-28T10:00:00+00:00",
@@ -68,7 +70,7 @@ class LibraryOrganiseTest : ScreenTest() {
             item("sunday", "2026-10-25T22:00:00+00:00", markers = 1),
             item("failed", status = "failed", finalStatus = null),
             item("tfailed", finalStatus = "failed"),
-            item("waiting", "2026-10-28T14:00:00+00:00", status = "recording"),
+            item("waiting", "2026-10-28T14:00:00+00:00", status = "recording", endedAt = "2026-10-28T14:30:00+00:00"),
             item("gone", deleted = true, pinned = true)
         )
         fun ids(view: SmartView) = items.filter { Organise.inView(it, view, now) }.map { it.id }
@@ -78,6 +80,9 @@ class LibraryOrganiseTest : ScreenTest() {
         assertEquals(listOf("sunday"), ids(SmartView.BOOKMARKED))
         assertEquals(listOf("failed", "tfailed"), ids(SmartView.FAILED))
         assertEquals(listOf("waiting"), ids(SmartView.WAITING))
+        // Contract 2.0.0-z: a call still being recorded (no end, started 10 minutes ago) is not waiting yet.
+        val live = item("live", now.minusMinutes(10).toOffsetDateTime().toString(), status = "recording")
+        assertFalse(Organise.inView(live, SmartView.WAITING, now))
         assertEquals(listOf("monday"), ids(SmartView.PINNED))
         assertEquals(6, Organise.counts(items, now)[SmartView.ALL])
     }

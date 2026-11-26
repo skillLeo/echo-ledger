@@ -158,12 +158,12 @@ export function LibraryNav({ current, counts, labelCounts, onScope, shared, onNe
     <div className="el-library-nav">
       <section className="el-nav-section" aria-label={t("Views")}>
         <SectionHead title={t("Views")} folded={libraryFolded} onFold={foldLibrary} />
-        {viewMenu && <ContextMenu label={t(LIBRARY_VIEW_NAMES[viewMenu.view])} at={viewMenu.at} onClose={() => setViewMenu(null)} items={placeMenu(viewMenu.view)} />}
+        {viewMenu && <ContextMenu label={LIBRARY_VIEW_NAMES[viewMenu.view]} at={viewMenu.at} onClose={() => setViewMenu(null)} items={placeMenu(viewMenu.view)} />}
         {!libraryFolded && <ul className="el-nav-list" aria-label={t("Library views")}>
           {LIBRARY_VIEWS.map((view) => (
             <li key={view} onContextMenu={(e) => { e.preventDefault(); openViewMenu(view, { x: e.clientX, y: e.clientY }); }}>
               {/* facets.ts's English names, said in the window's language. */}
-              <Row icon={VIEW_ICONS[view]} label={t(LIBRARY_VIEW_NAMES[view])} count={counts?.[view]} strong={STRONG.includes(view)}
+              <Row icon={VIEW_ICONS[view]} label={LIBRARY_VIEW_NAMES[view]} count={counts?.[view]} strong={STRONG.includes(view)}
                 current={current === `view:${view}`} onClick={() => onScope({ kind: "view", view })} aria-keyshortcuts={shortcut({ kind: "view", view })} />
             </li>
           ))}

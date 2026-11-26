@@ -118,7 +118,7 @@ it('says a missed recording in Urdu, and in English as before', function () {
     expect($missed->activityBody())->toBe('WhatsApp call · 5:12 · A permission was off');
 
     app()->setLocale('ur');
-    expect(preg_replace('/[\x{2066}-\x{2069}]/u', '', ActivityFeed::text($missed->activityLine())))->toBe('واٹس ایپ کال · 5:12 · ایک اجازت بند تھی')
+    expect(preg_replace('/[\x{2066}-\x{2069}]/u', '', ActivityFeed::text($missed->activityLine())))->toBe('WhatsApp کال · 5:12 · ایک اجازت بند تھی')
         ->and($missed->activityBody())->toBe('WhatsApp call · 5:12 · A permission was off');
     $browser = new MissedRecording(['source_app' => MissedRecording::BROWSER, 'call_duration_s' => null, 'reason' => 'nope']);
     expect(preg_replace('/[\x{2066}-\x{2069}]/u', '', ActivityFeed::text($browser->activityLine())))->toBe('براؤزر میں کال · وجہ معلوم نہیں');
