@@ -9,7 +9,7 @@ Phone rules for every batch: `pm install -r` only; never uninstall, never clear 
 ## Tonight 20:00 (2026-11-23) — the call choice and the new navigation, Mac 2.0.11 and phone 2.0.9, about 55 minutes
 
 Builds:
-- **Mac:** 2.0.11 (signed, pinned identity): the call choice, the not-recorded warning, the Library filters and saved views, All recordings with every way back, and the three-level navigation (rail · panel · tabs). Waiting in the lead's scratchpad. The lead installs it after "mac free".
+- **Mac:** 2.0.11 (signed, pinned identity): the call choice, the not-recorded warning, the Library filters and saved views, All recordings with every way back, and the three-level navigation (rail · panel · tabs). Waiting to be installed: it goes on after "mac free".
 - **Windows:** `EchoLedger_2.0.11_x64-setup.exe` from https://github.com/skillLeo/echo-ledger/releases/tag/v2.0.11.
 - **Phone:** 2.0.10 (code 30) is installed (21:46): everything in 2.0.9 (the call choice, screenshots while recording) plus the Library filters and saved views.
 
@@ -104,7 +104,7 @@ Builds: the v1.8.1 release candidate from CI on `release/v1.8.1` (desktop 1.8.1;
 first: it gates the release.
 
 Update 19:15: the first 1.8.1 candidate froze on permissions (S0, found in the Mac session) and was withdrawn before
-release. The fixed candidate adds the start-up stall fix and the permissions fix; the lead installs it on the Mac and
+release. The fixed candidate adds the start-up stall fix and the permissions fix; it is installed on the Mac and
 posts the Windows download link when its CI is green. Gate 3 and the decisions were settled this afternoon, so
 items 2 and 3 below are done. On the Windows laptop, also check that Record and Live captions respond at once after
 the app opens (the S0 path). The phone already has 1.8.1 (code 18); nothing to install there tonight.
@@ -138,7 +138,7 @@ dark) and approve the new Home lines: "written down" instead of "word for word",
 of "accurate transcripts", "Urdu and Roman Urdu" instead of "Urdu, accurately".
 
 **3. Decisions, 5 minutes**
-Trash 48 hours or 30 days; the Live Assist plan numbers; who deploys the website (the lead with backup and rollback).
+Trash 48 hours or 30 days; the Live Assist plan numbers; who deploys the website (one person, with backup and rollback).
 Also: the desktop app's words are English only (the phone is translated). Its Urdu pictures show the right-to-left
 layout with English words. Translating the desktop interface into Urdu is a separate piece of work: now, or later?
 Each Gate 3 folder (phone and desktop) has an index of its pictures.
@@ -291,7 +291,7 @@ The phone is the viewer. Rows from [MANUAL_QA.md](MANUAL_QA.md) "Screen-share pr
 
 ## Paused 2026-11-18 03:52 PKT
 
-Owner devices now: Mac 2.0.1 (installed 2026-11-17, start-up check passed), phone S25 2.0.1 (code 21, `install -r`). Windows 1.8.2 is not yet tested on the owner's laptop. Next device step after resume: build Mac 2.0.2 from v1.1 once b-desktop-share-default is merged, run `sh scripts/smoke-mac.sh <app> 180`, then install it over 2.0.1. See docs/RESUME_HERE.md.
+Owner devices now: Mac 2.0.1 (installed 2026-11-17, start-up check passed), phone S25 2.0.1 (code 21, `install -r`). Windows 1.8.2 is not yet tested on the owner's laptop. Next device step after resume: build Mac 2.0.2 from v1.1 once b-desktop-share-default is merged, run `sh scripts/smoke-mac.sh <app> 180`, then install it over 2.0.1.
 
 ## Tonight 20:00–21:30 PKT (2026-11-18) — 2.0.2, about 75 minutes
 
@@ -315,7 +315,7 @@ Gate 3: approved 2026-11-17, no images pending.
 4. **Black window / scrolling, 8 min (S1).** Open Library, a recording, Settings, Projects and Activity. Scroll each with the trackpad, then a mouse. Note any screen that goes black or won't scroll.
 
 ### 2. Phone S25 (2.0.2), 20 min
-1. Turn on Wireless debugging; the lead installs 2.0.2 (2 min, no data cleared).
+1. Turn on Wireless debugging; 2.0.2 is installed (2 min, no data cleared).
 2. Open the app: classic, recordings all there, record a 20 s voice note and check it transcribes.
 3. Settings › Appearance › Try the new design. The text uses the app's font, not the Samsung handwriting font.
 4. Library: long-press a row for selection mode, then Move, Label, Delete with Undo; filter chips; Sort and group.
@@ -381,7 +381,7 @@ Urdu title (rename one to "ادائیگی کا منصوبہ اور قرض کی �
 3. Back to your usual appearance. Note anything else that looks off, with a photo.
 
 ### 2. Phone S25 (2.0.2), 20 min
-1. Turn on Wireless debugging; the lead installs 2.0.2 (2 min, no data cleared).
+1. Turn on Wireless debugging; 2.0.2 is installed (2 min, no data cleared).
 2. Open the app: classic, recordings all there; record a 20 s voice note and check it transcribes.
 3. Settings › Appearance › Try the new design. Pass: the text uses the app's font, not the Samsung handwriting font.
 4. Library: long-press a row for selection mode, then Move, Label, Delete with Undo; filter chips; Sort and group.
@@ -398,7 +398,7 @@ Urdu title (rename one to "ادائیگی کا منصوبہ اور قرض کی �
 6. Half the screen (Win + ←): open a recording and scroll it to the end. Note whether the transcript can be reached
    (2.0.2 is before the half-screen fix; this is the baseline for 2.0.3 on Windows).
 
-After each part, the lead turns every "fail" into a bug with an ID (EL-Fix triages within the hour).
+After each part, every "fail" becomes a bug with an ID (triaged within the hour).
 
 ### F6/U15 — Send to WhatsApp, Text and voice (the builds with F6 and U15), Mac 10 min, Windows 15 min, phone 15 min
 Use a recording with audio and a transcript, in the classic design. Send to a test chat (your own number or a test
@@ -507,6 +507,6 @@ Builds:
 4. Right-click selected transcript words. Pass: a short menu: Cut, Copy, Paste, Select all only (no Print, no Share).
    Right-click inside the search field. Pass: Cut, Copy, Paste, Select all (Undo and spelling come in 2.0.15).
 
-After each part, the lead turns every "fail" into a bug with an ID (EL-Fix triages within the hour). Pending
+After each part, every "fail" becomes a bug with an ID (triaged within the hour). Pending
 approvals you can give from tonight's devices: VISUAL-OK (the look), rows OK (the Library rows), NAV-OK (the sidebar
 and title row).

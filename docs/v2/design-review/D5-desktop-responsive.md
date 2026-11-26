@@ -1,6 +1,6 @@
 # D5 — Desktop responsive rules (classic and v2)
 
-Owner: EL-Design. For: EL-Fix (classic desktop bugs, the width check) and EL-UX (v2 desktop screens).
+Owner: Design. For: the classic desktop fixes (and the width check) and the v2 desktop screens.
 Status: rules v1, 2026-11-21. They are based on F1 (b-desktop-ux @ 4c69e2fe), which already does most of this for the Library. Every other screen follows the same rules.
 
 ## 1. What decides the layout
@@ -21,7 +21,7 @@ Status: rules v1, 2026-11-21. They are based on F1 (b-desktop-ux @ 4c69e2fe), wh
 
 Check list widths: **720, 756, 800, 1024, 1280, 1728**, each in light/dark, EN/UR, at text 100 % and 200 %.
 
-Fixed with this rule set: the v2 sidebar rule used `--el-breakpoint-compact` (720), so it could never fire in a window that is at least 720 px wide. v2 now uses the new `--el-breakpoint-rail` token (780, the same as classic's AUTO_RAIL_BELOW). `compact` stays 720 for the web console. tokensOnly.test.ts:88 lists 780px among the allowed media-query widths (changed under EL-Lead's lock).
+Fixed with this rule set: the v2 sidebar rule used `--el-breakpoint-compact` (720), so it could never fire in a window that is at least 720 px wide. v2 now uses the new `--el-breakpoint-rail` token (780, the same as classic's AUTO_RAIL_BELOW). `compact` stays 720 for the web console. tokensOnly.test.ts:88 lists 780px among the allowed media-query widths (changed under a lock).
 
 ## 3. Narrow page (< 798)
 1. **List → item.** Opening an item hides the list and its toolbar. The item fills the full width.
@@ -61,7 +61,7 @@ Fixed with this rule set: the v2 sidebar rule used `--el-breakpoint-compact` (72
 - Layout mirrors: the rail and sidebar move to the right, Back and the chevrons flip, and the order of row content flips.
 - **These do not mirror:** the player transport (skip back / play / skip forward), the waveform and its progress, times and durations ("0:00 / 2:15", "8:12 AM"), speeds ("1×"), phone numbers, and keyboard hints. Wrap them in `<bdi dir="ltr">` or an element with `direction: ltr; unicode-bidi: isolate`.
 - Free text (titles, notes, banners, transcript lines) uses `dir="auto"`. Titles truncate at their own logical end, which F1 already does.
-- Full rules: D4 (Urdu/Arabic typography). Open bugs from F1-visual go to EL-Fix with D-163.
+- Full rules: D4 (Urdu/Arabic typography). Open bugs from F1-visual go to the classic fixes with D-163.
 
 ## 8. What each screen must pass (width check + eye)
 1. No words drawn over words, and no control over another's value (widthcheck.mjs).
@@ -72,6 +72,6 @@ Fixed with this rule set: the v2 sidebar rule used `--el-breakpoint-compact` (72
 6. Light/dark, EN/UR and 100/200 % pictures go in docs/qa/desktop-widths/ (classic) or docs/v2/design-review/<id>/ (v2).
 
 ## 9. Hand-off
-- **EL-Fix (classic):** sections 3.3 (sticky item bar), 3.6 (the remaining top bar steps), 4 (stack variables beyond the Library) 7 (bidi isolates), 5 (the resizable list column) and the drawer's full width below 798 are not done yet. Apply them to Home, Projects, Project, Shared, Activity and Settings, then extend the width check to the item-page Back reachability and to every screen in the matrix.
-- **EL-UX (v2):** use the same sizes through `--el-breakpoint-*`. Sections 3 and 4 apply to every v2 list/detail page. EL-Design will ship the sticky item bar as a shared component (D6).
-- **EL-Design (done with this file):** `breakpoint.rail` 780 and `layer.dock` 15 are in tokens/global/size.json, and v2.css:803 uses the rail value, and tokens/test checks both against lib/shell.ts. Page-width sizes (798 and 1120) stay in lib/shell.ts, because they are container sizes and not window breakpoints. v2 reads them through the same `.narrow` / `.no-column` classes. The sticky item bar comes as a shared component with D6.
+- **Fixes (classic):** sections 3.3 (sticky item bar), 3.6 (the remaining top bar steps), 4 (stack variables beyond the Library) 7 (bidi isolates), 5 (the resizable list column) and the drawer's full width below 798 are not done yet. Apply them to Home, Projects, Project, Shared, Activity and Settings, then extend the width check to the item-page Back reachability and to every screen in the matrix.
+- **Screens (v2):** use the same sizes through `--el-breakpoint-*`. Sections 3 and 4 apply to every v2 list/detail page. Design will ship the sticky item bar as a shared component (D6).
+- **Design (done with this file):** `breakpoint.rail` 780 and `layer.dock` 15 are in tokens/global/size.json, and v2.css:803 uses the rail value, and tokens/test checks both against lib/shell.ts. Page-width sizes (798 and 1120) stay in lib/shell.ts, because they are container sizes and not window breakpoints. v2 reads them through the same `.narrow` / `.no-column` classes. The sticky item bar comes as a shared component with D6.
