@@ -668,18 +668,22 @@ pub async fn end(app: &AppHandle) -> AppResult<()> {
     ended
 }
 
-/// Ends Live Assist without sending the turns it hasn't sent yet: a call a contact's Don't record stopped (contract
-/// 2.0.0-w, decision 25), so nothing more of it goes anywhere. The card closes; the recording is left to what stopped it.
-pub async fn end_without_last_turns(app: &AppHandle) -> AppResult<()> {
+/// Ends Live Assist at once without sending the turns it hasn't sent yet: a call a contact's Don't record stopped
+/// (contract 2.0.0-w, decision 25), so nothing more of it goes anywhere. The session is taken now (its every-second
+/// upkeep has nothing left to send), the card closes whatever the server says, and only the end goes to the server, in
+/// the background. The recording is left to what stopped it.
+pub fn end_without_last_turns(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
-    let Some(taken) = state.assist.take() else { return Ok(()) };
-    let ended = match state.api()?.assist_end(&taken.id).await {
-        Err(e) if e.code() == Some("session_ended") => Ok(()),
-        other => other,
-    };
+    let Some(taken) = state.assist.take() else { return };
     emit(app, &card::ended_message("closed", None));
     crate::lifecycle::hide(app, WINDOW, "assist");
-    ended
+    let Ok(api) = state.api() else { return };
+    tauri::async_runtime::spawn(async move {
+        match api.assist_end(&taken.id).await {
+            Err(e) if e.code() != Some("session_ended") => eprintln!("[echoledger] ending Live Assist for a call rule: {e}"),
+            _ => {}
+        }
+    });
 }
 
 /// A button on the card.

@@ -1512,8 +1512,10 @@ async fn stop_for_contact_rule(app: &AppHandle, client_ref: String) {
     if let Err(e) = crate::call_rules::mark_dropped(&state.data_dir, &dir, open.as_slice(), &state.queue_lock) {
         eprintln!("[echoledger] marking a recording a call rule stops: {e}");
     }
-    // Live Translate, captions and the capture stop first; Live Assist ends after, in the background, without sending the
-    // turns it hasn't sent yet.
+    // Live Assist first, at once: its session taken, so it sends nothing more of the call while captions finish (never
+    // its unsent turns); only its end goes to the server, in the background. Then Live Translate, captions and the
+    // capture stop.
+    crate::assist::live::end_without_last_turns(app);
     crate::translate::stop(app);
     let session = match end_capture(app).await {
         Ok(Some((_, session, _))) => session,
@@ -1524,12 +1526,6 @@ async fn stop_for_contact_rule(app: &AppHandle, client_ref: String) {
             None
         }
     };
-    let assist = app.clone();
-    tauri::async_runtime::spawn(async move {
-        if let Err(e) = crate::assist::live::end_without_last_turns(&assist).await {
-            eprintln!("[echoledger] ending Live Assist for a call rule: {e}");
-        }
-    });
     let late = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).end_stop(&client_ref);
     let _ = take_call_choice(&state, &client_ref);
     let sessions: Vec<String> = session.into_iter().chain(late).collect();
