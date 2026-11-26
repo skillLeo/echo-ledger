@@ -312,6 +312,14 @@
 .el-row__title--strong { font-weight: var(--el-text-body-strong-weight); }
 .el-row__meta { display: flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; color: var(--el-role-text-secondary); }
 .el-row__meta-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-inline-size: 0; }
+/* Urdu (D-262): a row's title and meta clip their overflow, and Nastaliq's ink rises far above its line and falls below
+   it, and a first or last letter's stroke reaches past the line's ends, so in Urdu the clip box takes room on every side
+   (12 px above, 8 px at each end, 4 px below) that its margins give back: the row's layout is unchanged and the ink
+   stays inside the box (measured: scripts/urduD261.mjs). */
+:lang(ur) :is(.el-row__title, .el-row__meta-text) {
+  padding: var(--el-space-12) var(--el-space-8) var(--el-space-4);
+  margin: calc(-1 * var(--el-space-12)) calc(-1 * var(--el-space-8)) calc(-1 * var(--el-space-4));
+}
 .el-row__end {
   flex: none;
   display: flex; flex-direction: column; align-items: flex-end; gap: var(--el-space-2);
