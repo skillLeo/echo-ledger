@@ -20,7 +20,7 @@ const mac = () => currentPlatform() === "macos";
 
 /**
  * Its items for one project: only what something here can run and what fits (a right-click menu, `context`), with no
- * keys (a right-click menu on a Mac shows none).
+ * keys (a right-click menu on a Mac shows none). In the window's language, as the Projects panel it opens from is.
  */
 export const projectItems = (ctx: ActionContext) =>
   menuItems(PROJECT_MENU.filter((id) => id === "-" || canRun(id, ctx.kind)), { ...ctx, context: true })

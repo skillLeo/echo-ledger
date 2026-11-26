@@ -44,7 +44,7 @@ try {
     page.setDefaultTimeout(120_000);
     await keepViews(page);
     await page.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${FLAGS},v21_urdu${where}&applang=ur&uploads=1`);
-    await page.getByRole("navigation", { name: "Main" }).waitFor();
+    await page.locator('nav[data-nav="main"]').waitFor();
     await page.waitForFunction(() => document.documentElement.dir === "rtl", null, { timeout: 30_000 }).catch(() => undefined);
     await page.waitForTimeout(1000);
 

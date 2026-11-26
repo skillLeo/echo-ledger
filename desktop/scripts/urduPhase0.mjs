@@ -31,13 +31,13 @@ try {
       const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });
       page.setDefaultTimeout(120_000);
       await page.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${FLAGS},v21_urdu${where}${extra}`);
-      await page.getByRole("navigation", { name: "Main" }).waitFor();
+      await page.locator('nav[data-nav="main"]').waitFor();
       await page.waitForTimeout(1500);
       return page;
     };
     // English account: Settings › Appearance has Language.
     let page = await open("");
-    await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: /^Settings/ }).click();
+    await page.locator('nav[data-nav="main"]').getByRole("button", { name: /^Settings/ }).click();
     await page.waitForTimeout(800);
     await page.getByTestId("nav-panel").getByRole("button", { name: /^Appearance/ }).first().click();
     const group = page.getByRole("radiogroup", { name: "Language" });
@@ -58,7 +58,7 @@ try {
     await page.close();
     // An Urdu account: the Library, right to left from the start.
     page = await open("&applang=ur");
-    await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: /^Library/ }).click();
+    await page.locator('nav[data-nav="main"]').getByRole("button", { name: /^Library/ }).click();
     await page.waitForTimeout(1000);
     await page.mouse.move(0, 0);
     await page.screenshot({ path: shot("library-ur") });

@@ -393,7 +393,8 @@ export type NativeBarEntry =
     /** One of the core's own commands: what its look follows while there is no page (app_menu.rs CoreItem). */
     core?: { when: string[]; state: string | null; off: string | null; on: string | null; check: string | null };
   }
-  | { kind: "native"; action: string; native: string }
+  /** One of macOS's own items: the system's action and key; its words in the window's language ("&" written "&&"). */
+  | { kind: "native"; action: string; native: string; label: string }
   | { kind: "separator" }
   | { kind: "submenu"; action?: string; label: string; enabled: boolean; items: NativeBarEntry[] };
 

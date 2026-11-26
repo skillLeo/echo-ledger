@@ -38,7 +38,7 @@ const open = async ({ platform = "macos", lang = "en", theme = "light", height =
   }, compact);
   const lights = platform === "macos" ? "&lights=1" : "";
   await page.goto(`${base}scripts/screens/index.html?screen=library&theme=${theme}&uiflags=${V2_FLAGS}&platform=${platform}${lights}${lang === "ur" ? "&lang=ur" : ""}`);
-  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Library", exact: true }).click();
+  await page.locator('nav[data-nav="main"]').getByRole("button", { name: "Library", exact: true }).click();
   await page.locator("button[data-row-id]").first().waitFor();
   // Below 1100 px the panel is a flyout: closed, so the rail shows as the person sees it at rest.
   if (await page.getByTestId("nav-panel").count() && WIDTH < 1100) await page.keyboard.press("Escape");
