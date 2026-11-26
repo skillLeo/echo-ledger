@@ -35,7 +35,7 @@ export function ProjectScreensV2({ client, first, notify, onOpenRecording, onCli
           <Card>
           <List label={t("Screen moments of this project")} className="el-group__rows">
             <ListRow compact icon={Icons.ScreenIcon} iconStyle="plain" title={t("Keep screen moments")} meta={hint}
-              control={<Toggle label={t("Keep screen moments")} hideLabel checked={keeps} disabled={saving} onChange={() => void toggle()} />} />
+              control={<Toggle label={t("Keep screen moments")} hideLabel hint={hint} checked={keeps} disabled={saving} onChange={() => void toggle()} />} />
           </List>
           </Card>
         </section>

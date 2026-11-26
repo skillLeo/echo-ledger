@@ -21,7 +21,8 @@ export function Toggle({ checked, onChange, label, hideLabel, hint, disabled }: 
       aria-labelledby={`${id}-label`} aria-describedby={hint ? `${id}-hint` : undefined} onClick={() => onChange(!checked)} />
   );
   if (hideLabel) {
-    return <>{sw}<span id={`${id}-label`} className="el-visually-hidden">{label}</span></>;
+    // The row beside it shows the words; assistive tools still hear the name and, given one, the hint (D-267).
+    return <>{sw}<span id={`${id}-label`} className="el-visually-hidden">{label}</span>{hint && <span id={`${id}-hint`} className="el-visually-hidden">{hint}</span>}</>;
   }
   return (
     <span className="el-check-row">

@@ -196,21 +196,13 @@ export function ScreenViewer({ screens, index, onIndex, onClose, onPlay, onDelet
   );
 }
 
-/** "Kick-off · 4 Nov" under a project screen's label; in a right-to-left language the title sits in its isolate. */
-/** Where a project's screen is from: its recording's title (isolated in right to left) and when it started. */
+/** Where a project's screen is from, "Kick-off · 4 Nov": its recording's title (in its isolate in a right-to-left language) and when it started. */
 export function sessionLine(s: ProjectScreen, lang?: Lang): string {
   const when = s.session_started_at ? formatWhen(s.session_started_at) : "";
   const title = titleIn(s.session_title, lang);
   return [rtlIn(lang) && s.session_title?.trim() ? isolate(title) : title, when].filter(Boolean).join(" · ");
 }
 
-/**
- * A project's Screens tab (`GET /api/clients/{id}/screens`, its subfolders too): the screens of each recording in a
- * grid, newest recording first, 60 at a time with Show more; a click opens the viewer, whose Play from here opens the
- * recording at that moment. With the server's `screens` switch, the project can keep screens of its meetings or not.
- * Its words are in `lang`, the window's by default (the new design's project page, on its Files tab); classic's
- * project page passes "en". The project's and the recordings' names are as they are.
- */
 /**
  * A project's screens and its keep switch, shared by classic's Screens tab (ProjectScreens) and the new design's
  * (v2/workspace/ProjectScreensV2): the first page and the next ones (Show more), fresh links when a picture's has
@@ -277,6 +269,13 @@ export function useProjectScreens({ client, first, notify, onClientChanged }: {
   return { screens, cursor, loading, more, renew, keeps, saving, toggle };
 }
 
+/**
+ * A project's Screens tab (`GET /api/clients/{id}/screens`, its subfolders too): the screens of each recording in a
+ * grid, newest recording first, 60 at a time with Show more; a click opens the viewer, whose Play from here opens the
+ * recording at that moment. With the server's `screens` switch, the project can keep screens of its meetings or not.
+ * Its words are in `lang`, the window's by default; classic's project page passes "en" (the new design's page draws
+ * ProjectScreensV2). The project's and the recordings' names are as they are.
+ */
 export function ProjectScreens({ client, first, notify, onOpenRecording, onClientChanged, lang }: {
   client: ClientFolder;
   /** The first page, read when the project opened (it also told whether the server has screen moments). */
