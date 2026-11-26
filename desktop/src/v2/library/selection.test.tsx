@@ -892,8 +892,9 @@ describe("menus stay inside the window", () => {
     document.documentElement.dir = "rtl";
     render(<LibraryV2 />);
     await act(flushAsync);
-    fireEvent.contextMenu(row("Habib & Co."), { clientX: 1270, clientY: 790 });
-    expect(screen.getByRole("menu", { name: "Recording actions" })).toHaveStyle({ left: "1040px", top: "400px" });
+    // Right to left it opens to the pointer's left (D-256), so the corner it can run off is the bottom-left one.
+    fireEvent.contextMenu(row("Habib & Co."), { clientX: 10, clientY: 790 });
+    expect(screen.getByRole("menu", { name: "Recording actions" })).toHaveStyle({ left: "0px", top: "400px" });
     document.documentElement.dir = "ltr";
     spy.mockRestore();
   });
