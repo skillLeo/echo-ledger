@@ -1,10 +1,11 @@
 // Desktop Urdu, D-259, in the screens fixture (every v2 flag and v21_urdu on, the account's language Urdu: "&applang=ur",
-// 1280 × 800), on a Mac and on Windows, light: the All projects page (its title in the title row, Sort, Request files and
-// New project, each card's line: its recordings, last call and folders) and a project's Recordings (its rows' times and
-// lengths, D-258, in the project's own left-to-right box). It checks that the window reads right to left, that each
-// scene shows its Urdu, that the app's message regions are named in Urdu, and saves
-// docs/design/screens/desktop/urdu-d259/<platform>-<step>.png; the run fails when a check doesn't hold.
-//   node scripts/urduD259.mjs
+// 1280 × 800), on a Mac and on Windows, in the light and the dark theme: the All projects page (its title in the title
+// row, Sort, Request files and New project, each card's line: its recordings, last call and folders) and a project's
+// Recordings (its rows' times and lengths, D-258, in the project's own left-to-right box). It checks that the window
+// reads right to left, that each scene shows its Urdu, that the app's message regions are named in Urdu, and saves
+// docs/design/screens/desktop/urdu-d259/<platform>-<step>.png (light) and <platform>-<step>-dark.png; the run fails
+// when a check doesn't hold.
+//   node scripts/urduD259.mjs [--only=macos-light,windows-dark]
 import { createServer } from "vite";
 import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
@@ -24,13 +25,16 @@ const problems = [];
 const root = (page) => page.evaluate(() => `${document.documentElement.lang || "-"}/${document.documentElement.dir || "-"}`);
 
 try {
-  for (const platform of ["macos", "windows"]) {
-    const where = platform === "windows" ? "&platform=windows" : "&platform=macos&lights=1";
-    const label = `${platform} (light)`;
-    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: "light", reducedMotion: "reduce" });
+  const only = process.argv.find((a) => a.startsWith("--only="))?.split("=")[1]?.split(",");
+  for (const [platform, theme] of [["macos", "light"], ["macos", "dark"], ["windows", "light"], ["windows", "dark"]]) {
+    if (only && !only.includes(`${platform}-${theme}`)) continue;
+    const where = `${platform === "windows" ? "&platform=windows" : "&platform=macos&lights=1"}&theme=${theme}`;
+    const label = `${platform} (${theme})`;
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
     page.setDefaultTimeout(120_000);
-    await page.goto(`${base}scripts/screens/index.html?screen=projects&uiflags=${FLAGS},v21_urdu${where}&theme=light&applang=ur`);
-    await page.getByRole("navigation", { name: "Main" }).waitFor();
+    await page.goto(`${base}scripts/screens/index.html?screen=projects&uiflags=${FLAGS},v21_urdu${where}&applang=ur`);
+    // The main nav by its mark (its name is مرکزی in Urdu once D-255 is in, "Main" before).
+    await page.locator('nav[data-nav="main"], nav[aria-label="Main"]').first().waitFor();
     await page.waitForFunction(() => document.documentElement.dir === "rtl", null, { timeout: 30_000 }).catch(() => undefined);
     await page.locator(".el-project-card").first().waitFor();
     await page.waitForTimeout(1000);
@@ -39,7 +43,7 @@ try {
     const shot = async (step, words) => {
       await page.mouse.move(0, 0);
       await page.waitForTimeout(500);
-      await page.screenshot({ path: join(out, `${platform}-${step}.png`) });
+      await page.screenshot({ path: join(out, `${platform}-${step}${theme === "dark" ? "-dark" : ""}.png`) });
       const at = await root(page);
       const speaks = await page.getByText(words, { exact: false }).first().isVisible().catch(() => false);
       console.log(`${label}: ${step}; <html> ${at}; ${speaks ? "in Urdu" : "NOT in Urdu"}`);

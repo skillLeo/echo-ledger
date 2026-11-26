@@ -37,7 +37,8 @@ try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
     page.setDefaultTimeout(120_000);
     await page.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${FLAGS},v21_urdu${where}&applang=ur`);
-    await page.getByRole("navigation", { name: "Main" }).waitFor();
+    // The main nav by its mark (its name is مرکزی in Urdu once D-255 is in, "Main" before).
+    await page.locator('nav[data-nav="main"], nav[aria-label="Main"]').first().waitFor();
     await page.waitForFunction(() => document.documentElement.dir === "rtl", null, { timeout: 30_000 }).catch(() => undefined);
     await page.getByRole("list", { name: "لائبریری کے ویوز" }).getByRole("button", { name: /^تمام ریکارڈنگز/ }).click();
     await page.locator(".el-rec").first().waitFor();

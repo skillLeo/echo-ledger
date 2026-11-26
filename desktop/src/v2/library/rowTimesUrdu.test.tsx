@@ -85,6 +85,30 @@ describe("a row's time", () => {
     expect(clockTime(on(19, 5))).toBe(`${parts.find((p) => p.type === "dayPeriod")?.value} 7:05`);
   });
 
+  it("Urdu on an engine that gives no part of the day: the formatter's own whole time, never a space and no word", async () => {
+    await urdu();
+    const original = Intl.DateTimeFormat.prototype.formatToParts;
+    const spy = vi.spyOn(Intl.DateTimeFormat.prototype, "formatToParts").mockImplementation(function (this: Intl.DateTimeFormat, date?: Date | number) {
+      return original.call(this, date).filter((p) => p.type !== "dayPeriod");
+    });
+    try {
+      const own = new Intl.DateTimeFormat("ur-PK", { hour: "numeric", minute: "2-digit", hourCycle: "h12", dayPeriod: "short" } as Intl.DateTimeFormatOptions);
+      for (const d of [on(7, 10), on(14, 5), on(21, 5)]) {
+        const time = clockTime(d);
+        expect(time).not.toBe("");
+        expect(time).not.toMatch(/^\s/);
+        expect(time).toBe(own.format(d));
+        expect(formatTime(d)).toBe(own.format(d).replace(/\s/g, NBSP));
+      }
+      expect(spy).toHaveBeenCalled();
+      // English doesn't ask for the parts: "7:10 am" as always.
+      await act(() => setLanguage("en", { root: false }));
+      expect(formatTime(on(7, 10))).toBe("7:10 am");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("Urdu with the 24-hour clock: 07:10 and 21:05, as before", async () => {
     await urdu();
     setClock24(true);

@@ -62,13 +62,15 @@ let urduClock: Intl.DateTimeFormat | null = null;
 /**
  * Urdu's 12-hour time as a Mac writes it, its part of the day first: "صبح 10:05", "دوپہر 2:00", "سہ پہر 4:30",
  * "شام 7:05", "رات 9:05" (the words are ICU's own, CLDR's ur). WebKit's ur-PK already says so; Chromium (Windows) and
- * Node write "10:05 AM" for the same time, so the day's part is asked for by name and put first on every engine.
+ * Node write "10:05 AM" for the same time, so the day's part is asked for by name and put first on every engine. An
+ * engine that gives no part of the day keeps the formatter's own whole time (never " 7:10", a space and no word).
  */
 function urduTime(date: Date): string {
   urduClock ??= new Intl.DateTimeFormat("ur-PK", { hour: "numeric", minute: "2-digit", hourCycle: "h12", dayPeriod: "short" } as Intl.DateTimeFormatOptions);
   const parts = urduClock.formatToParts(date);
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${part("dayPeriod")} ${part("hour")}:${part("minute")}`;
+  const dayPeriod = part("dayPeriod");
+  return dayPeriod ? `${dayPeriod} ${part("hour")}:${part("minute")}` : urduClock.format(date);
 }
 
 /** A time of day by Preferences' clock, in `lang` (the window's): "9:05 AM" or "09:05"; in Urdu "صبح 9:05" or "09:05". */
