@@ -291,7 +291,7 @@ The phone is the viewer. Rows from [MANUAL_QA.md](MANUAL_QA.md) "Screen-share pr
 
 ## Paused 2026-11-18 03:52 PKT
 
-Owner devices now: Mac 2.0.1 (installed 2026-11-17, start-up check passed), phone S25 2.0.1 (code 21, `install -r`). Windows 1.8.2 is not yet tested on the owner's laptop. Next device step after resume: build Mac 2.0.2 from v1.1 once b-desktop-share-default is merged, run `sh scripts/smoke-mac.sh <app> 180`, then install it over 2.0.1. See docs/RESUME_HERE.md.
+Owner devices now: Mac 2.0.1 (installed 2026-11-17, start-up check passed), phone S25 2.0.1 (code 21, `install -r`). Windows 1.8.2 is not yet tested on the owner's laptop. Next device step after resume: build Mac 2.0.2 from v1.1 once b-desktop-share-default is merged, run `sh scripts/smoke-mac.sh <app> 180`, then install it over 2.0.1.
 
 ## Tonight 20:00–21:30 PKT (2026-11-18) — 2.0.2, about 75 minutes
 

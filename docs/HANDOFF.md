@@ -1088,7 +1088,7 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
 
 ## 2026-11-18 03:52 PKT — paused by the owner (1–2 days)
 
-All work stopped cleanly; see **docs/RESUME_HERE.md** for the full state, next steps and risks. In short:
+All work stopped cleanly. In short:
 - **Production:** v1.1 at 144c5514 (classic for everyone, v2 Opt-in, Live Assist on the VPS relay, caption speed 80 ms). Owner devices: Mac 2.0.1, phone 2.0.1 (code 21). v1.1 on GitHub is at cb7f1d68, app-side work past production.
 - **Approved, not merged:** b-desktop-share-default d88e6767 (screen shares per window + caption latency). Merge after CI, then build Mac 2.0.2.
 - **Waiting for re-review:** b-phone-parity-recording 5ea084d9. b-phone-parity e7b12b6c needs a status check first.
