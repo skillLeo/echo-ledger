@@ -5,10 +5,13 @@
 // project's menu). The app's navigation is found by data-nav="main", its name being the window's language.
 // Saves docs/design/screens/desktop/urdu-d261/<platform>-<scene>[-en][-dark].png and fails (listing each problem with
 // its scene and its text) when, in Urdu, the window doesn't read right to left (<html lang="ur" dir="rtl">), a scene's
-// own text has Latin letters left that aren't a kept name (the brands and plans that stay Latin, the fixture's people,
-// projects, titles and files, keys), or a label is cut; in English, when a label is cut. A label (a button, a tab, a
-// heading, a label, a menu item, a dialog's title) is cut when its words, Nastaliq's ink up and down included, don't lie
-// inside its box or a box it sits in clips them (textOnScreen.mjs's cutLabels).
+// own text has Latin letters left that aren't kept (the brands and plans that stay Latin, file formats, the fixture's
+// people, projects, titles, emails and files, key combinations), or a text is cut; in English, when a text is cut. A
+// text (a label, a heading, a paragraph) is cut when it loses ink: a box it sits in (overflow not visible) or the window
+// clips it, Nastaliq's ink included (up and down, and a first letter's stroke past its line's start), or its ink runs
+// into the border of a card it sits in, or it is truncated with "…" (but the fixture's own names and titles, which rows
+// cut on purpose); textOnScreen.mjs's cutTexts. Ink that crosses a control's own border with nothing clipping it is
+// printed as a note (the control's size is design's to change), not a failure.
 //   node scripts/urduD261.mjs [--only=macos-light,windows-dark] ["--scenes=new-project,rename,project-*"] [--lang=ur|en]
 import { createServer } from "vite";
 import { chromium } from "playwright";
@@ -16,7 +19,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FLAGS } from "../src/v2/gallery/cases.mjs";
-import { cutLabels, onScreen, sceneTexts } from "./textOnScreen.mjs";
+import { cutTexts, onScreen, sceneTexts } from "./textOnScreen.mjs";
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), "..");
 const out = join(desktop, "..", "docs", "design", "screens", "desktop", "urdu-d261");
@@ -33,14 +36,19 @@ const scenes = arg("scenes");
 const langs = arg("lang") ?? ["ur", "en"];
 const wanted = (scene) => !scenes || scenes.some((s) => scene === s || (s.endsWith("*") && scene.startsWith(s.slice(0, -1))));
 
-/** Names that stay Latin in an Urdu line (the brands, the plans, the units, a transcript's language chip). */
-const KEPT = ["EchoLedger", "WhatsApp Business", "WhatsApp Web", "WhatsApp", "Google Meet", "Google", "Meet", "Zoom", "Microsoft Teams", "Teams", "Groq",
-  "macOS", "Windows", "Free", "Pro", "Ultra", "MB", "GB", "KB", "PDF", "EN", "UR", "Work laptop"];
 /**
- * The fixture's own words (scripts/screens/data.ts): its people, projects, recordings' titles and what was said, files,
- * a brief, memory and answers. Every text in them, but the app's enums, ids, dates and the labels the server sends for
- * the app to name in its own words (source_app_label…), and a call note's headings (the app has headings of its own
- * with the same English: Decisions, Changes).
+ * What stays Latin in an Urdu line: the brands, the plans, the units, a transcript's language chip, the file formats,
+ * and the fixture's device's name.
+ */
+const KEPT = ["EchoLedger", "WhatsApp Business", "WhatsApp Web", "WhatsApp", "Google Meet", "Google", "Meet", "Zoom", "Microsoft Teams", "Teams", "Groq",
+  "macOS", "Windows", "Free", "Pro", "Ultra", "MB", "GB", "KB", "EN", "UR",
+  "PDF", "Word", "Markdown", "OPUS", "OGG", "MP3", "M4A", "AAC", "WAV", "MP4", "WEBM", "TXT", "DOCX", "Work laptop"];
+/**
+ * The fixture's own words (scripts/screens/data.ts): its people, projects, recordings' titles and what was said, emails,
+ * files, a brief, memory and answers. Every text in them, but the app's enums, ids, dates and the labels the server
+ * sends for the app to name in its own words (source_app_label…), and a call note's headings (the app has headings of
+ * its own with the same English: Decisions, Changes). An email or a file's name is kept as it is ("scope.pdf",
+ * "sara@contoso.com").
  */
 const DATA_SKIP = new Set(["id", "kind", "status", "type", "key", "heading", "mime", "source_app", "source_app_label", "source_device", "source_device_label",
   "final_provider", "final_provider_label", "final_model", "final_status", "final_language", "language", "audience", "created_by", "role", "error_code", "final_error_code"]);
@@ -49,7 +57,10 @@ const data = new Set(KEPT);
 const harvest = (value, key) => {
   if (typeof value === "string") {
     const text = value.trim();
-    if (!DATA_SKIP.has(key) && /[A-Za-z]/.test(text) && !/^[a-z0-9_.:/@+-]+$/.test(text) && !/^\d{4}-\d\d-\d\d/.test(text) && !/^(https?|data):/.test(text)) data.add(text);
+    const email = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(text);
+    const file = /^[^\s/\\]+\.[a-z0-9]{2,5}$/i.test(text);
+    const enumLike = /^[a-z0-9_.:/@+-]+$/.test(text) && !email && !file;
+    if (!DATA_SKIP.has(key) && /\p{L}/u.test(text) && !enumLike && !/^\d{4}-\d\d-\d\d/.test(text) && !/^(https?|data):/.test(text)) data.add(text);
   } else if (Array.isArray(value)) value.forEach((v) => harvest(v, key));
   else if (value && typeof value === "object") for (const [k, v] of Object.entries(value)) harvest(v, k);
 };
@@ -60,8 +71,13 @@ for (const name of ["CLIENTS", "ITEMS", "WORKSPACE", "ANSWER", "PENDING", "ACCOU
 const DATA = [...data];
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const dataPattern = new RegExp(`(?<![A-Za-z])(?:${DATA.sort((a, b) => b.length - a.length).map(escape).join("|")})(?![A-Za-z])`, "g");
-/** Keys as the app writes them: ⌘N, ⇧⌘K, Ctrl+N, Ctrl+Shift+F, Esc. */
-const KEYS = /(?:[⌘⌥⇧⌃]\s?)+(?:[A-Z0-9]|F\d{1,2}|Enter|Esc|Tab|Space|Delete|[←→↑↓,.\][])|\b(?:Ctrl|Alt|Shift|Cmd|Win)(?:\s?\+\s?(?:Ctrl|Alt|Shift|[A-Z0-9]|F\d{1,2}|Enter|Esc|Tab|Space|Delete|Backspace|[←→↑↓,.\][]))+|\b(?:Esc|Enter)\b/g;
+/**
+ * Keys as the app writes them: ⌘N, ⇧⌘K, Ctrl+N, "Ctrl + Shift + Space", Esc. The named keys anywhere; a letter, a digit
+ * or a function key only in a combination (after ⌘ ⌥ ⇧ ⌃, or joined to another key by "+").
+ */
+const NAMED_KEY = "(?:Ctrl|Control|Shift|Alt|Option|Cmd|Command|Space|Enter|Return|Esc|Escape|Tab|Delete|Backspace)";
+const ANY_KEY = `(?:${NAMED_KEY}|F\\d{1,2}|[A-Z0-9]|[←→↑↓,.\\][])(?![A-Za-z])`;
+const KEYS = new RegExp(`(?:[⌘⌥⇧⌃]\\s?)+(?:${ANY_KEY})?|(?<![A-Za-z])${ANY_KEY}(?:\\s*\\+\\s*${ANY_KEY})+|\\b${NAMED_KEY}\\b`, "g");
 /** What is left of a text once its kept names, data and keys are out (and the isolates): any Latin letter is English left. */
 const latinLeft = (text) => {
   const rest = text.replace(/[\u2066-\u2069\u200e\u200f]/g, "").replace(dataPattern, "").replace(KEYS, "");
@@ -114,8 +130,8 @@ try {
         const english = urdu ? [...new Set(texts.filter(latinLeft))] : [];
         for (const text of english.slice(0, 12)) say(`Latin left: “${text}”`);
         if (english.length > 12) say(`and ${english.length - 12} more texts with Latin letters`);
-        const { cut, notes } = await cutLabels(page, root, DATA);
-        for (const c of cut) say(`cut ${c.what} “${c.text}”: ${c.why}`);
+        const { cut, notes } = await cutTexts(page, root, DATA);
+        for (const c of new Set(cut.map((c) => `cut ${c.what} “${c.text}”: ${c.why}`))) say(c);
         console.log(`${label} ${scene}: <html> ${at}; ${texts.length} texts${urdu ? `, ${english.length} with Latin left` : ""}; ${cut.length} cut${english.length || cut.length ? "" : " (clear)"}`);
         for (const n of notes) console.log(`  note: ${n.what} “${n.text}”: ${n.why}`);
       };
