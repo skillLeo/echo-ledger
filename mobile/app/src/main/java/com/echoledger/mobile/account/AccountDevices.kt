@@ -22,6 +22,7 @@ import java.io.File
 import java.security.MessageDigest
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** The authenticator's QR code (the otpauth URI), dark on light, with its quiet zone. */
 object QrCode {
@@ -103,10 +104,25 @@ class AvatarCache(private val dir: File, private val origin: String) {
 
     fun get(person: String, version: Long): ByteArray? = file(person, version).takeIf { it.isFile }?.readBytes()
 
+    /**
+     * Keeps [bytes] as [person]'s picture of [version], whole or not at all: written beside it first and then renamed
+     * (atomic in one folder), so a reader never sees half a file; the older versions go only after the rename.
+     */
     fun put(person: String, version: Long, bytes: ByteArray) {
         dir.mkdirs()
-        dir.listFiles { f -> f.name.startsWith(safe(person) + "_") }?.forEach { it.delete() }
-        file(person, version).writeBytes(bytes)
+        val target = file(person, version)
+        val draft = File(dir, "${target.name}.${System.nanoTime()}.tmp")
+        draft.writeBytes(bytes)
+        if (!draft.renameTo(target)) {
+            target.delete()
+            if (!draft.renameTo(target)) {
+                draft.delete()
+                return
+            }
+        }
+        dir.listFiles { f ->
+            f.name.startsWith(safe(person) + "_") && f.name != target.name && !f.name.endsWith(".tmp")
+        }?.forEach { it.delete() }
     }
 
     fun forget(person: String) {
@@ -122,10 +138,24 @@ class AvatarCache(private val dir: File, private val origin: String) {
 
         fun of(context: Context, origin: String) = AvatarCache(dir(context), origin)
 
-        /** Sign-out, or a sign-in that may be another account: no one's picture stays on the phone. */
+        private val cleared = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+
+        /** [forget] runs with every [clearAll] (the pictures kept in memory, [ActorPictures]). */
+        fun onClearAll(forget: () -> Unit) {
+            cleared += forget
+        }
+
+        /**
+         * Sign-out, or a sign-in that may be another account: no one's picture stays on the phone. The pictures in memory
+         * go first, so a load running in between can't write the old account's picture back into a folder made again.
+         */
         fun clearAll(context: Context) {
+            cleared.forEach { it() }
             dir(context).deleteRecursively()
         }
+
+        /** The server an avatar address is on, as [com.echoledger.mobile.net.ApiClient.origin] writes it; null for no address. */
+        fun originOf(url: String?): String? = url?.toHttpUrlOrNull()?.let { "${it.scheme}://${it.host}:${it.port}" }
 
         /** The person an avatar address belongs to (`/api/avatars/{user}/{version}`), or [fallback]. */
         fun personOf(url: String?, fallback: String): String =

@@ -81,6 +81,7 @@ import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.Spellcheck
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Stop
@@ -93,6 +94,7 @@ import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.Wallpaper
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.WorkspacePremium
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -163,6 +165,9 @@ object EchoIcons {
     val Empty: ImageVector get() = Icons.Outlined.Inbox
     val Projects: ImageVector get() = Icons.Outlined.FolderOpen
     val Bell: ImageVector get() = Icons.Outlined.Notifications
+
+    /** A warning (Activity's unusual use: the only sign of what it is). */
+    val Warning: ImageVector get() = Icons.Outlined.WarningAmber
     val Stop: ImageVector get() = Icons.Outlined.Stop
     val Mic: ImageVector get() = Icons.Outlined.Mic
     val MicOff: ImageVector get() = Icons.Outlined.MicOff
@@ -222,6 +227,9 @@ object EchoIcons {
 
     /** A recording made on the web (the source mark's device badge). */
     val DeviceWeb: ImageVector get() = Icons.Outlined.Language
+
+    /** A recording made on a phone (the source mark's device badge): the phone itself, not a handset. */
+    val DevicePhone: ImageVector get() = Icons.Outlined.Smartphone
 
     /** The Inbox smart folder: recordings in no project. */
     val Inbox: ImageVector get() = Icons.Outlined.Inbox
