@@ -57,11 +57,28 @@ let clock24 = false;
 export function setClock24(on: boolean): void {
   clock24 = on;
 }
-export function clockTime(date: Date): string {
-  return clock24
-    ? date.toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
-    : date.toLocaleTimeString(numberLocale(), { hour: "numeric", minute: "2-digit", hour12: true });
+
+let urduClock: Intl.DateTimeFormat | null = null;
+/**
+ * Urdu's 12-hour time as a Mac writes it, its part of the day first: "صبح 10:05", "دوپہر 2:00", "سہ پہر 4:30",
+ * "شام 7:05", "رات 9:05" (the words are ICU's own, CLDR's ur). WebKit's ur-PK already says so; Chromium (Windows) and
+ * Node write "10:05 AM" for the same time, so the day's part is asked for by name and put first on every engine.
+ */
+function urduTime(date: Date): string {
+  urduClock ??= new Intl.DateTimeFormat("ur-PK", { hour: "numeric", minute: "2-digit", hourCycle: "h12", dayPeriod: "short" } as Intl.DateTimeFormatOptions);
+  const parts = urduClock.formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${part("dayPeriod")} ${part("hour")}:${part("minute")}`;
 }
+
+/** A time of day by Preferences' clock, in `lang` (the window's): "9:05 AM" or "09:05"; in Urdu "صبح 9:05" or "09:05". */
+export function clockTime(date: Date, lang: Lang = language()): string {
+  if (clock24) return date.toLocaleTimeString(lang === "ur" ? "ur-PK" : "en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  return lang === "ur" ? urduTime(date) : date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+}
+
+/** clockTime kept whole, as a date line shows it: in Urdu its spaces don't break ("سہ پہر 4:30" on one line). */
+const wholeTime = (date: Date, lang: Lang = language()): string => (lang === "ur" ? clockTime(date, lang).replace(/\s/g, "\u00A0") : clockTime(date, lang));
 
 /** When something happened, in parts, in the window's language: the day ("Today", "Yesterday", "23 Nov") and the time. */
 export type WhenParts = { day: string; time: string; today: boolean; yesterday: boolean };
@@ -69,7 +86,7 @@ export type WhenParts = { day: string; time: string; today: boolean; yesterday: 
 /**
  * The parts of formatWhen, for a place that shows only one of them (Activity's time today, a project's last call, a
  * row's time): never by splitting formatWhen's line, which in Urdu is one right-to-left run. In Urdu the day is آج, کل
- * or "23 نومبر" and the time keeps its space from breaking ("2:00 PM" whole). Null with no date, or one that isn't.
+ * or "23 نومبر" and the time keeps its spaces from breaking ("دوپہر 2:00" whole). Null with no date, or one that isn't.
  */
 export function whenParts(iso?: string | null, now: Date = new Date()): WhenParts | null {
   if (!iso) return null;
@@ -80,7 +97,7 @@ export function whenParts(iso?: string | null, now: Date = new Date()): WhenPart
   before.setDate(now.getDate() - 1);
   const yesterday = date.toDateString() === before.toDateString();
   const urdu = language() === "ur";
-  const time = urdu ? clockTime(date).replace(/\s/g, "\u00A0") : clockTime(date);
+  const time = wholeTime(date);
   if (today) return { day: urdu ? t("Today") : "Today", time, today, yesterday };
   if (yesterday) return { day: urdu ? t("Yesterday") : "Yesterday", time, today, yesterday };
   return { day: dayMonth(date), time, today, yesterday };
@@ -334,15 +351,20 @@ export function sentenceDate(iso: string | null | undefined): string {
   return Number.isNaN(at.getTime()) ? "" : at.toLocaleDateString(dateLocale(), { day: "numeric", month: "long", year: "numeric" });
 }
 
-/** A time of day by Settings › Appearance › Times: "3:42 pm" (12-hour) or "15:42" (24-hour). */
-export function formatTime(date: Date): string {
-  if (clock24) return date.toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+/**
+ * A time of day by Settings › Appearance › Times: "3:42 pm" (12-hour) or "15:42" (24-hour). In Urdu the time every
+ * date line says (whenParts' time: "صبح 10:05", kept whole, or "15:42"). `lang` "en" for a line that stays English
+ * in every language (Copy for AI's header, the classic pages).
+ */
+export function formatTime(date: Date, lang: Lang = language()): string {
+  if (lang === "ur") return wholeTime(date, lang);
+  if (clock24) return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   const h = date.getHours();
   const m = date.getMinutes();
   return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
 }
 
-/** A range of times: "10 pm–7 am" (":00" dropped) or "22:00–07:00". */
+/** A range of times: "10 pm–7 am" (":00" dropped) or "22:00–07:00". English: its one caller, classic Security's "Quiet …", is. */
 export function timeRange(from: string, to: string): string {
   const parse = (hhmm: string) => {
     const [h, m] = hhmm.split(":").map(Number);
@@ -350,7 +372,7 @@ export function timeRange(from: string, to: string): string {
     return d;
   };
   const one = (hhmm: string) => {
-    const text = formatTime(parse(hhmm));
+    const text = formatTime(parse(hhmm), "en");
     return clock24 ? text : text.replace(":00", "");
   };
   return `${one(from)}–${one(to)}`;

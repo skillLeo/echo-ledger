@@ -8,7 +8,7 @@ import { dayGroup, itemState, recordingName, searchItems, sortItems } from "../.
 import { formatTime, rowDate } from "../../lib/format";
 import { partsText } from "../../lib/languages";
 import { facetsOf, kindOfItem, sourceOf, statusOf, type Kind } from "./facets";
-import { t, tc } from "../../i18n";
+import { language, PDI, RLI, t, tc } from "../../i18n";
 
 /** The saved views (classic's smart views and the new design's Untranscribed), and Trash. */
 export type SavedView = "all" | "today" | "this_week" | "untranscribed" | "waiting" | "pinned" | "bookmarked" | "failed" | "trash";
@@ -109,19 +109,32 @@ export function rowState(item: LibraryItem, now: number = Date.now()): RowState 
 
 /**
  * A length as a row says it (UX-06): "44s" under a minute, "2m 38s" under an hour, "1h 04m" from an hour; never a clock
- * ("2:38") that reads like the time beside it.
+ * ("2:38") that reads like the time beside it. In Urdu the units' words, the numbers as they are ("44 سیکنڈ",
+ * "2 منٹ 38 سیکنڈ", "1 گھنٹہ 4 منٹ", a whole "2 منٹ"), as one right-to-left run, so a left-to-right box (Home's and a
+ * project's .el-ltr) keeps its order. English as it always was.
  */
 export function rowDuration(ms?: number | null): string {
   if (ms == null || ms <= 0) return "";
   const total = Math.max(1, Math.round(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  if (language() === "ur") {
+    // A whole minute or hour says only that ("2 منٹ", "1 گھنٹہ"), not "0 سیکنڈ".
+    const words = total < 60 ? tc(":count s", total)
+      : total < 3600 ? (seconds ? tc(":count min :s s", minutes, { s: seconds }) : tc(":count minutes", minutes))
+      : minutes ? tc(":count h :m min", hours, { m: minutes }) : tc(":count hour|:count hours", hours);
+    return `${RLI}${words}${PDI}`;
+  }
   if (total < 60) return `${total}s`;
-  if (total < 3600) return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, "0")}s`;
-  return `${Math.floor(total / 3600)}h ${String(Math.floor((total % 3600) / 60)).padStart(2, "0")}m`;
+  if (total < 3600) return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
 }
 
 /**
  * When a row's recording happened (UX-06): in a date group (Today, Yesterday, This week) only the time; elsewhere
  * (Pinned, other groupings, search) today the time, yesterday "Yesterday", earlier "12 Nov", another year "12 Nov 2025".
+ * The time is formatTime's: "7:10 am"; in Urdu the time every date line says ("صبح 7:10").
  */
 export function rowWhen(iso: string | null | undefined, now: Date = new Date(), timeOnly = false): string {
   const at = iso ? new Date(iso) : null;

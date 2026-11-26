@@ -644,7 +644,7 @@ export function timelineSteps(request: UpgradeRequest, name: string): { label: s
 function when(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : `${rowDate(iso)}, ${formatTime(d)}`;
+  return Number.isNaN(d.getTime()) ? "" : `${rowDate(iso)}, ${formatTime(d, "en")}`;
 }
 
 function StatusStep({ e, request, name, onPay, onReceipt, onUpdate, onAgain }: {

@@ -256,7 +256,7 @@ export function RequestCard({ e, request, onOpen, onPay, onReceipt, onCancel, on
     },
     in_review: {
       title: "Checking your payment", tag: "In review",
-      body: <p>{paidAt ? `We got your receipt on ${rowDate(paidAt)} at ${formatTime(new Date(paidAt))}. ` : ""}{request.payment?.review_hours ?? "We check receipts every day."}</p>,
+      body: <p>{paidAt ? `We got your receipt on ${rowDate(paidAt)} at ${formatTime(new Date(paidAt), "en")}. ` : ""}{request.payment?.review_hours ?? "We check receipts every day."}</p>,
       primary: inFlow ? undefined : ["View request", onOpen],
     },
     needs_receipt: {

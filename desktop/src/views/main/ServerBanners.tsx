@@ -46,7 +46,7 @@ export function backAbout(until: string | null | undefined, now: Date = new Date
   const at = new Date(until);
   if (Number.isNaN(at.getTime()) || at.getTime() <= now.getTime()) return "";
   const sameDay = at.toDateString() === now.toDateString();
-  return `Back about ${sameDay ? "" : `${at.toLocaleDateString([], { month: "short", day: "numeric" })}, `}${clockTime(at)}.`;
+  return `Back about ${sameDay ? "" : `${at.toLocaleDateString([], { month: "short", day: "numeric" })}, `}${clockTime(at, "en")}.`;
 }
 
 /** A message the core says while the server holds the work: shown as news, never as a failure. */
