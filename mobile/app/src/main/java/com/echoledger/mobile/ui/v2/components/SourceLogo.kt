@@ -5,6 +5,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
@@ -34,7 +36,7 @@ import com.echoledger.mobile.ui.v2.tokens.EchoTokens
  * the installed app's icon from this phone, on a neutral circle; a glyph from the one icon set when the app isn't
  * here (a SIM call, a voice note, an app used on another device). The same sources as the desktop's SourceLogos and
  * the web's source-logo partial. The colours are the apps' own, from their icons, never written here.
- * [device] adds the small badge for a recording made on a computer or on the web (none for one made on a phone).
+ * [device] adds the small device badge: a phone, a computer or the web (none when the device isn't known).
  * [label] names the mark for screen readers; without it the mark is decorative (the row says the app).
  */
 @Composable
@@ -45,31 +47,52 @@ fun EchoSourceLogo(app: SourceApp, modifier: Modifier = Modifier, device: Source
     val px = with(LocalDensity.current) { size.roundToPx() }
     val icon = rememberAppIcon("v2-source:${app.name}:$px") { installedIcon(context, app, px) }
     Box(modifier.size(size).then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier)) {
-        Box(Modifier.size(size).clip(CircleShape).background(c.bgSubtle), contentAlignment = Alignment.Center) {
-            if (icon != null) {
-                Image(icon, null, Modifier.size(size))
-            } else {
+        when {
+            // A voice note is EchoLedger's own: its mark is the app's calm accent with the voice glyph (D12).
+            app == SourceApp.VOICE_NOTE -> Box(
+                Modifier.size(size).clip(CircleShape).background(c.accentSoft),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(EchoIcons.SettingsVoice, null, Modifier.size(EchoTokens.Icon.md), tint = c.accentText)
+            }
+
+            icon != null -> Image(icon, null, Modifier.size(size).clip(CircleShape))
+
+            else -> Box(Modifier.size(size).clip(CircleShape).background(c.bgSubtle), contentAlignment = Alignment.Center) {
                 Icon(app.glyph(), null, Modifier.size(EchoTokens.Icon.md), tint = c.textSecondary)
             }
         }
         val badge = when (device) {
+            SourceDevice.PHONE -> EchoIcons.DevicePhone
             SourceDevice.DESKTOP -> EchoIcons.DeviceComputer
             SourceDevice.WEB -> EchoIcons.DeviceWeb
             else -> null
         }
         if (badge != null) {
-            Box(
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(EchoTokens.Icon.md)
-                    .clip(CircleShape)
-                    .background(c.bgSurface)
-                    .border(EchoTokens.Border.hairline, c.borderDefault, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(badge, null, Modifier.size(EchoTokens.Space.s12), tint = c.textSecondary)
-            }
+            EchoMarkBadge { Icon(badge, null, Modifier.size(EchoTokens.Space.s12 - EchoTokens.Space.s2), tint = c.textSecondary) }
         }
+    }
+}
+
+/**
+ * The small badge on a mark's bottom end corner (D12), the same on [EchoSourceLogo] and [EchoRowAvatar]: 16 dp, 2 dp
+ * outside the mark's corner, ringed 2 dp in the row's background so the mark's edge is never cut. offset() already
+ * mirrors x in right-to-left layouts, so +2 dp is outward on both sides.
+ */
+@Composable
+private fun BoxScope.EchoMarkBadge(content: @Composable () -> Unit) {
+    val c = EchoV2.colors
+    Box(
+        Modifier
+            .align(Alignment.BottomEnd)
+            .offset(x = EchoTokens.Space.s2, y = EchoTokens.Space.s2)
+            .size(EchoTokens.Component.avatarBadge)
+            .border(EchoTokens.Border.strong, c.bgCanvas, CircleShape)
+            .clip(CircleShape)
+            .background(c.bgSurface),
+        contentAlignment = Alignment.Center
+    ) {
+        content()
     }
 }
 
@@ -122,15 +145,7 @@ fun EchoRowAvatar(
             else -> EchoAvatar(icon = EchoIcons.Person)
         }
         if (look.badge) {
-            Box(
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(badge)
-                    .clip(CircleShape)
-                    .background(c.bgSurface)
-                    .border(EchoTokens.Border.hairline, c.borderDefault, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
+            EchoMarkBadge {
                 if (mark != null) {
                     Image(mark, null, Modifier.size(badge))
                 } else {

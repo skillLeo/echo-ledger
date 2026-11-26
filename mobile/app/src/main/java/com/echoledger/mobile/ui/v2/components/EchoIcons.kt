@@ -81,6 +81,7 @@ import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.Spellcheck
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Stop
@@ -226,6 +227,9 @@ object EchoIcons {
 
     /** A recording made on the web (the source mark's device badge). */
     val DeviceWeb: ImageVector get() = Icons.Outlined.Language
+
+    /** A recording made on a phone (the source mark's device badge): the phone itself, not a handset. */
+    val DevicePhone: ImageVector get() = Icons.Outlined.Smartphone
 
     /** The Inbox smart folder: recordings in no project. */
     val Inbox: ImageVector get() = Icons.Outlined.Inbox
