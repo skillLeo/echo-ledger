@@ -1,5 +1,8 @@
 package com.echoledger.mobile.ui
 
+import android.content.res.Configuration
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -31,6 +34,7 @@ import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.testsupport.storeRecording
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
@@ -717,5 +721,24 @@ class LibraryScreenTest : ScreenTest() {
         gate.open()
         pumpUntil("marked") { vm.message.value == "2 recordings marked as read" }
         compose.onNodeWithText("1 selected").assertIsDisplayed()
+    }
+
+    /** Follow-up review of 2.0.0-y (5): classic's words for marking many are in the app's language, as v2's. */
+    @Test
+    fun `marking many says so in Urdu when the app is in Urdu`() {
+        seed(item("a", title = "First call"), item("b", title = "Second call"))
+        server.on("POST", "/api/sessions/opened", FakeServer.json(200, """{"done":["a","b"],"not_found":[]}"""))
+        val urdu = app.createConfigurationContext(Configuration(app.resources.configuration).apply { setLocale(Locale("ur")) })
+        show {
+            CompositionLocalProvider(LocalContext provides urdu) {
+                LibraryScreen(vm, readiness = ReadinessFixtures.READY, onReady = {}, onOpen = {})
+            }
+        }
+        compose.onNodeWithText("First call").performTouchInput { longClick() }
+        compose.onNodeWithText("Second call").performClick()
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNodeWithText("Mark as read").performClick()
+        pumpUntil("marked") { vm.message.value?.startsWith("2 ") == true }
+        assertEquals("2 ریکارڈنگز پڑھی ہوئی نشان زد ہو گئیں", vm.message.value)
     }
 }

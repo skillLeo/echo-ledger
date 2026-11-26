@@ -9,7 +9,13 @@ import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -96,8 +102,9 @@ class MarkReadManyTest : ScreenTest() {
         assertTrue(singles("POST").isEmpty())
         assertEquals(true, opened("01K001"))
         assertEquals(true, opened("01K450"))
-        assertTrue("gone ones bring a sync", server.requestsTo("GET", "/api/library").size > syncs)
-        assertTrue("and leave the list", !listed("01K010"))
+        // The sync runs on its own (the answer doesn't wait for it), and the gone one leaves the list when it ends.
+        waitFor("gone ones to bring a sync") { server.requestsTo("GET", "/api/library").size > syncs }
+        waitFor("the gone one to leave the list") { !listed("01K010") }
     }
 
     @Test
@@ -184,7 +191,7 @@ class MarkReadManyTest : ScreenTest() {
         assertEquals(ids.subList(4, 10), run.left)
         assertEquals(true, opened("01K004"))
         assertEquals(false, opened("01K005"))
-        assertTrue("the gone one leaves the list", !listed("01K003"))
+        waitFor("the gone one to leave the list") { !listed("01K003") }
     }
 
     @Test
@@ -221,6 +228,145 @@ class MarkReadManyTest : ScreenTest() {
                 assertEquals(status, (failure as ApiException).status)
             }
         }
+    }
+
+    /** A scope of the test's own, so a call can wait while the test answers the server. */
+    private val elsewhere = CoroutineScope(Dispatchers.IO)
+
+    private fun waitFor(what: String, done: () -> Boolean) {
+        val end = System.currentTimeMillis() + 10_000
+        while (!done()) {
+            check(System.currentTimeMillis() < end) { "Timed out waiting for $what" }
+            Thread.sleep(10)
+        }
+    }
+
+    /** The opening's POST for 01K001 waits for [gate]; [answered] turns true once the server has taken it. */
+    private fun slowOpening(gate: FakeServer.Hold, answered: AtomicBoolean) {
+        server.on("POST", "/api/sessions/01K001/opened") { request ->
+            gate.await(30)
+            oneAnswer(request).also { answered.set(true) }
+        }
+    }
+
+    /** Follow-up review of 2.0.0-y (1): a refused change goes back only while it is still the latest to its recording. */
+    @Test
+    fun `a change refused after newer ones leaves the newest showing`() {
+        seed(read = true)
+        val late = server.hold()
+        val deletes = AtomicInteger()
+        server.on("DELETE", "/api/sessions/01K001/opened") { request ->
+            if (deletes.getAndIncrement() == 0) {
+                late.await(30)
+                FakeServer.json(503, """{"message":"Down","code":"x"}""")
+            } else {
+                oneAnswer(request)
+            }
+        }
+        server.on("POST", "/api/sessions/01K001/opened", oneAnswer)
+        // Unread (its answer comes late, and is a refusal), then read, then unread again.
+        val first = elsewhere.async { vm.markReadAs(item("01K001"), read = false) }
+        waitFor("the first on its way") { server.requestsTo("DELETE", "/api/sessions/01K001/opened").isNotEmpty() }
+        val second = elsewhere.async { vm.markReadAs(item("01K001"), read = true) }
+        waitFor("read here") { opened("01K001") == true }
+        val third = elsewhere.async { vm.markReadAs(item("01K001"), read = false) }
+        waitFor("unread here") { opened("01K001") == false }
+        late.open()
+        val results = runBlocking { withTimeout(20_000) { listOf(first.await(), second.await(), third.await()) } }
+        assertEquals("the phone shows the newest", false, opened("01K001"))
+        assertEquals(503, (results[0].exceptionOrNull() as ApiException).status)
+        assertTrue(results[1].isSuccess && results[2].isSuccess)
+        assertTrue("the server holds the newest", "01K001" !in serverRead)
+    }
+
+    /** Follow-up review of 2.0.0-y (2): Mark as unread just after opening reaches the server after the opening. */
+    @Test
+    fun `marking unread just after opening leaves it unread on the server too`() {
+        seed()
+        val gate = server.hold()
+        val answered = AtomicBoolean()
+        slowOpening(gate, answered)
+        server.on("DELETE", "/api/sessions/01K001/opened", oneAnswer)
+        vm.markOpened(item("01K001"))
+        waitFor("the opening on its way") { server.requestsTo("POST", "/api/sessions/01K001/opened").isNotEmpty() }
+        waitFor("read here") { opened("01K001") == true }
+        val unread = elsewhere.async { vm.markReadAs(item("01K001"), read = false) }
+        waitFor("unread here at once") { opened("01K001") == false }
+        gate.open()
+        assertTrue(runBlocking { withTimeout(20_000) { unread.await() } }.isSuccess)
+        waitFor("the opening answered") { answered.get() }
+        assertTrue("the server holds unread", "01K001" !in serverRead)
+        assertEquals(false, opened("01K001"))
+    }
+
+    /** Follow-up review of 2.0.0-y (2): the same for marking many, one of them just opened. */
+    @Test
+    fun `marking many unread just after opening one of them leaves it unread on the server too`() {
+        seed()
+        val gate = server.hold()
+        val answered = AtomicBoolean()
+        slowOpening(gate, answered)
+        server.on("DELETE", "/api/sessions/opened", bulkAnswers())
+        vm.markOpened(item("01K001"))
+        waitFor("the opening on its way") { server.requestsTo("POST", "/api/sessions/01K001/opened").isNotEmpty() }
+        waitFor("read here") { opened("01K001") == true }
+        val run = elsewhere.async { vm.setOpened(ids.take(2), false) }
+        // Time for the run's request to go, were it not to wait for the opening's.
+        val end = System.currentTimeMillis() + 2_000
+        while (server.requestsTo("DELETE", "/api/sessions/opened").isEmpty() && System.currentTimeMillis() < end) Thread.sleep(10)
+        gate.open()
+        assertEquals(ids.take(2).toSet(), runBlocking { withTimeout(20_000) { run.await() } }.done)
+        waitFor("the opening answered") { answered.get() }
+        assertTrue("the server holds unread", "01K001" !in serverRead)
+        assertEquals(false, opened("01K001"))
+    }
+
+    /** Follow-up review of 2.0.0-y (3): the answer, and so its toast, doesn't wait for the sync a gone one brings. */
+    @Test
+    fun `marking many doesn't wait for the sync a gone one brings`() {
+        seed()
+        val sync = server.hold()
+        server.on("GET", "/api/library") {
+            sync.await(30)
+            FakeServer.json(200, ServerFixtures.libraryPage(rows()))
+        }
+        server.on("POST", "/api/sessions/opened", bulkAnswers(gone = setOf("01K002")))
+        val run = runBlocking { withTimeout(5_000) { vm.setOpened(ids.take(3), true) } }
+        assertEquals(setOf("01K002"), run.notFound)
+        sync.open()
+        waitFor("the gone one to leave the list") { !listed("01K002") }
+    }
+
+    /** Follow-up review of 2.0.0-y (3): the same for one recording. */
+    @Test
+    fun `one recording's answer doesn't wait for the sync when it is gone`() {
+        seed(read = true)
+        val sync = server.hold()
+        server.on("GET", "/api/library") {
+            sync.await(30)
+            FakeServer.json(200, ServerFixtures.libraryPage(rows()))
+        }
+        server.on("DELETE", "/api/sessions/01K001/opened") {
+            serverGone += "01K001"
+            FakeServer.json(404, """{"message":"Not found","code":"session_not_found"}""")
+        }
+        val result = runBlocking { withTimeout(5_000) { vm.markReadAs(item("01K001"), read = false) } }
+        assertEquals(404, (result.exceptionOrNull() as ApiException).status)
+        sync.open()
+        waitFor("the gone one to leave the list") { !listed("01K001") }
+    }
+
+    /** Follow-up review of 2.0.0-y (4): only the asked ones change here, whatever else the server's done lists. */
+    @Test
+    fun `only the asked ones change here, whatever else the server's done lists`() {
+        seed()
+        server.on("POST", "/api/sessions/opened") { request ->
+            FakeServer.json(200, """{"done":${quoted(idsOf(request) + "01K400")},"not_found":[]}""")
+        }
+        val run = runBlocking { vm.setOpened(ids.take(2), true) }
+        assertEquals(ids.take(2).toSet(), run.done)
+        assertEquals(true, opened("01K002"))
+        assertEquals("not asked, so not changed here", false, opened("01K400"))
     }
 
     private fun item(id: String) = app.graph.library.items.value.first { it.id == id }

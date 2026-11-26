@@ -39,7 +39,9 @@ import java.io.File
 import java.io.IOException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +54,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -1503,10 +1506,48 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (item.opened != false) return
         val gen = graph.library.generation()
+        val change = graph.library.nextOpenedChange()
+        val turn = OpenedTurn(listOf(item.id))
         viewModelScope.launch(Dispatchers.IO) {
-            graph.library.markOpenedLocally(item.id, gen)
-            runCatching { graph.api()?.markOpened(item.id) }
+            try {
+                graph.library.markOpenedLocally(item.id, gen, change)
+                turn.waitForEarlier()
+                runCatching { graph.api()?.markOpened(item.id) }
+            } finally {
+                turn.done()
+            }
         }
+    }
+
+    /**
+     * The last read or unread request for each recording that is still on its way (opening it, Mark as read or unread,
+     * or a run for many): the next one for the same recording waits for it, so the server gets them in the order they
+     * were made. Opening a recording and quickly marking it unread leaves it unread there too.
+     */
+    private val openedRequests = java.util.concurrent.ConcurrentHashMap<String, Job>()
+
+    /** A place in that line for [ids], taken when the change is made, before anything waits. */
+    private inner class OpenedTurn(ids: Collection<String>) {
+        private val mine: Map<String, CompletableJob> = ids.associateWith { Job() }
+        private val earlier: Map<String, Job> = buildMap {
+            mine.forEach { (id, job) -> openedRequests.put(id, job)?.let { put(id, it) } }
+        }
+
+        /** Waits until the requests made before this one for [ids] are answered. */
+        suspend fun waitForEarlier(ids: Collection<String> = mine.keys) = ids.mapNotNull { earlier[it] }.joinAll()
+
+        /** This one's requests for [ids] are answered (or won't be sent): the next ones for them may go. */
+        fun done(ids: Collection<String> = mine.keys) = ids.forEach { id ->
+            mine[id]?.let {
+                it.complete()
+                openedRequests.remove(id, it)
+            }
+        }
+    }
+
+    /** A sync of its own, so a result (and its words) doesn't wait for it: gone recordings leave the list when it ends. */
+    private fun syncSoon() {
+        viewModelScope.launch(Dispatchers.IO) { runCatching { graph.library.refresh() } }
     }
 
     /**
@@ -1519,9 +1560,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun markReadAs(item: LibraryItem, read: Boolean): Result<Unit> {
         if ((item.opened != false) == read) return Result.success(Unit)
         val gen = graph.library.generation()
+        val change = graph.library.nextOpenedChange()
+        val turn = OpenedTurn(listOf(item.id))
         return viewModelScope.async(Dispatchers.IO) {
-            graph.library.setOpenedLocally(listOf(item.id), read, gen)
+            graph.library.setOpenedLocally(listOf(item.id), read, gen, change)
             val failure = try {
+                turn.waitForEarlier()
                 val api = graph.api() ?: throw NotPairedException()
                 if (read) api.markOpened(item.id) else api.markUnopened(item.id)
                 null
@@ -1530,10 +1574,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: IOException) {
                 // No connection, or not signed in any more (a NotPairedException is one too).
                 e
+            } finally {
+                turn.done()
             }
             if (failure == null) return@async Result.success(Unit)
-            graph.library.setOpenedLocally(listOf(item.id), !read, gen)
-            if ((failure as? ApiException)?.status == 404) runCatching { graph.library.refresh() }
+            // Back as it was, unless a newer change came to it meanwhile.
+            graph.library.undoOpenedLocally(item.id, !read, change, gen)
+            if ((failure as? ApiException)?.status == 404) syncSoon()
             Result.failure(failure)
         }.await()
     }
@@ -1556,9 +1603,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * bring a sync. It runs in the view model's scope: leaving or turning the screen doesn't cut a run short, and what
      * it did still changes here.
      */
-    suspend fun setOpened(ids: List<String>, opened: Boolean): OpenedRun = viewModelScope.async(Dispatchers.IO) {
+    suspend fun setOpened(ids: List<String>, opened: Boolean): OpenedRun {
         val all = ids.distinct()
-        val api = graph.api() ?: return@async OpenedRun(emptySet(), emptySet(), all, NotPairedException())
+        val change = graph.library.nextOpenedChange()
+        val turn = OpenedTurn(all)
+        return viewModelScope.async(Dispatchers.IO) {
+            try {
+                runOpened(all, opened, change, turn)
+            } finally {
+                turn.done()
+            }
+        }.await()
+    }
+
+    /** [setOpened]'s run: each part waits for the requests made before it for the same recordings. */
+    private suspend fun runOpened(all: List<String>, opened: Boolean, change: Long, turn: OpenedTurn): OpenedRun {
+        val api = graph.api() ?: return OpenedRun(emptySet(), emptySet(), all, NotPairedException())
         val gen = graph.library.generation()
         val done = LinkedHashSet<String>()
         val gone = LinkedHashSet<String>()
@@ -1567,6 +1627,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         var failure: Throwable? = null
         fun olderServer(status: Int) = status == 405 || status == 404 || (!opened && status == 403)
         run@ for (chunk in all.chunked(Organise.MAX_BULK)) {
+            turn.waitForEarlier(chunk)
             if (!oneByOne) {
                 val answer = try {
                     if (opened) api.markOpenedMany(chunk) else api.markUnopenedMany(chunk)
@@ -1580,11 +1641,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     failure = e
                     break@run
                 }
-                val did = answer?.done
+                val did = answer?.done?.filter { it in chunk }
                 if (did != null) {
-                    done += did.filter { it in chunk }
+                    done += did
                     gone += answer.notFound.filter { it in chunk }
-                    graph.library.setOpenedLocally(did, opened, gen)
+                    // Only the asked ones change here, whatever else the server's list holds.
+                    graph.library.setOpenedLocally(did, opened, gen, change)
+                    turn.done(chunk)
                     continue@run
                 }
                 oneByOne = true
@@ -1606,11 +1669,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     break@run
                 }
             }
+            turn.done(chunk)
         }
-        if (oneByOne) graph.library.setOpenedLocally(done, opened, gen)
-        if (gone.isNotEmpty()) runCatching { graph.library.refresh() }
-        OpenedRun(done, gone, all.filter { it !in done && it !in gone }, failure)
-    }.await()
+        if (oneByOne) graph.library.setOpenedLocally(done, opened, gen, change)
+        if (gone.isNotEmpty()) syncSoon()
+        return OpenedRun(done, gone, all.filter { it !in done && it !in gone }, failure)
+    }
 
     /**
      * Looks for missed recordings now (since v1.8; the app opened, at most every 10 minutes and only where something can
