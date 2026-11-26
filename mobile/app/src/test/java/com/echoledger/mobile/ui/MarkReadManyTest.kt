@@ -369,5 +369,76 @@ class MarkReadManyTest : ScreenTest() {
         assertEquals("not asked, so not changed here", false, opened("01K400"))
     }
 
+    private val down = """{"message":"Down","code":"x"}"""
+
+    /** Review of the follow-ups (1): two changes to one recording, both refused, leave what the server has. */
+    @Test
+    fun `two changes to one recording, both refused, leave what the server has`() {
+        seed(read = true)
+        val late = server.hold()
+        server.on("DELETE", "/api/sessions/01K001/opened") {
+            late.await(30)
+            FakeServer.json(503, down)
+        }
+        server.on("POST", "/api/sessions/01K001/opened", FakeServer.json(503, down))
+        // Mark as unread (refused, late), then Mark as read (refused).
+        val first = elsewhere.async { vm.markReadAs(item("01K001"), read = false) }
+        waitFor("the first on its way") { server.requestsTo("DELETE", "/api/sessions/01K001/opened").isNotEmpty() }
+        val second = elsewhere.async { vm.markReadAs(item("01K001"), read = true) }
+        waitFor("read here") { opened("01K001") == true }
+        late.open()
+        val results = runBlocking { withTimeout(20_000) { listOf(first.await(), second.await()) } }
+        assertTrue(results.all { it.isFailure })
+        assertEquals("read, as the server has it", true, opened("01K001"))
+    }
+
+    /** Review of the follow-ups (1): after an opening the server didn't take, a refused Mark as unread shows what it has. */
+    @Test
+    fun `after an opening the server didn't take, a refused Mark as unread leaves it unread, as the server has it`() {
+        seed()
+        server.on("POST", "/api/sessions/01K001/opened", FakeServer.json(503, down))
+        server.on("DELETE", "/api/sessions/01K001/opened", FakeServer.json(503, down))
+        vm.markOpened(item("01K001"))
+        waitFor("read here") { opened("01K001") == true }
+        val result = runBlocking { withTimeout(20_000) { vm.markReadAs(item("01K001"), read = false) } }
+        assertTrue(result.isFailure)
+        assertEquals("unread, as the server has it", false, opened("01K001"))
+    }
+
+    /** Review of the follow-ups (1): what a sync brings is what the server has, for a refusal after it. */
+    @Test
+    fun `a refusal after a sync goes back to what the sync brought`() {
+        seed()
+        server.on("POST", "/api/sessions/01K001/opened", FakeServer.json(503, down))
+        server.on("DELETE", "/api/sessions/01K001/opened", FakeServer.json(503, down))
+        assertTrue(runBlocking { vm.markReadAs(item("01K001"), read = true) }.isFailure)
+        assertEquals(false, opened("01K001"))
+        // Read on another device: the next sync brings it.
+        serverRead += "01K001"
+        runBlocking { app.graph.library.refresh() }
+        assertEquals(true, opened("01K001"))
+        assertTrue(runBlocking { vm.markReadAs(item("01K001"), read = false) }.isFailure)
+        assertEquals("read, as the sync brought it", true, opened("01K001"))
+    }
+
+    /** Review of the follow-ups (2): a local write that fails (as on a full disk) doesn't hold up the next change. */
+    @Test
+    fun `a failed local write doesn't hold up the next change to that recording`() {
+        seed(read = true)
+        server.on("DELETE", "/api/sessions/01K001/opened", oneAnswer)
+        server.on("POST", "/api/sessions/01K001/opened", oneAnswer)
+        // A folder where the cache's temporary file goes: writing the cache fails.
+        val blocker = java.io.File(app.noBackupFilesDir, "library.bin.tmp").apply { mkdirs() }
+        try {
+            runCatching { runBlocking { withTimeout(5_000) { vm.markReadAs(item("01K001"), read = false) } } }
+        } finally {
+            blocker.delete()
+        }
+        val now = item("01K001").opened != false
+        val next = runBlocking { withTimeout(5_000) { vm.markReadAs(item("01K001"), read = !now) } }
+        assertTrue(next.isSuccess)
+        assertEquals(!now, opened("01K001"))
+    }
+
     private fun item(id: String) = app.graph.library.items.value.first { it.id == id }
 }

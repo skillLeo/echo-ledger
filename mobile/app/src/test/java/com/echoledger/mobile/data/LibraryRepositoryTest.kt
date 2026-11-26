@@ -603,26 +603,37 @@ class LibraryRepositoryTest : AppTest() {
         assertEquals("signed out since: nothing changes", false, repo.items.value.first { it.id == "a" }.opened)
     }
 
-    /** Follow-up review of 2.0.0-y (1): the newest change to a row shows, and a refused one goes back only while it is the last. */
+    /**
+     * Follow-up review of 2.0.0-y (1): the newest change to a row shows, and a refused one goes back to what the server
+     * has, only while it is the row's last.
+     */
     @Test
-    fun `the newest read or unread change shows, and a refused one goes back only while it is the last`() = runBlocking {
+    fun `the newest read or unread change shows, and a refused one goes back to what the server has`() = runBlocking {
         val repo = repository()
         server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a")))))
         repo.refresh()
         val gen = repo.generation()
         fun a() = repo.items.value.first { it.id == "a" }.opened
+        val onServer = a()
+        assertTrue("the server's isn't unread: $onServer", onServer != false)
         val older = repo.nextOpenedChange()
         val newer = repo.nextOpenedChange()
         repo.setOpenedLocally(listOf("a"), false, gen, newer)
         repo.setOpenedLocally(listOf("a"), true, gen, older)
         assertEquals("an older change written late doesn't cover the newer", false, a())
-        repo.undoOpenedLocally("a", true, older, gen)
+        repo.undoOpenedLocally("a", older, gen)
         assertEquals("nor does going back from it", false, a())
-        repo.undoOpenedLocally("a", true, newer, gen)
-        assertEquals("the last change goes back", true, a())
-        repo.setOpenedLocally(listOf("a"), false, gen)
-        assertEquals("one with no number given is the newest", false, a())
+        repo.undoOpenedLocally("a", newer, gen)
+        assertEquals("the last change goes back to what the server has", onServer, a())
+        // The server takes unread; a refused read after it goes back to unread.
+        val taken = repo.nextOpenedChange()
+        repo.setOpenedLocally(listOf("a"), false, gen, taken)
+        repo.confirmOpenedLocally(listOf("a"), false, gen, taken)
+        val refused = repo.nextOpenedChange()
+        repo.setOpenedLocally(listOf("a"), true, gen, refused)
+        repo.undoOpenedLocally("a", refused, gen)
+        assertEquals("back to unread, as the server has it", false, a())
         repo.markOpenedLocally("a", gen, older)
-        assertEquals("an opening with an older number is dropped too", false, a())
+        assertEquals("an opening with an older number is dropped", false, a())
     }
 }

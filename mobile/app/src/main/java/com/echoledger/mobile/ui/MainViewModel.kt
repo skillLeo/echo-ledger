@@ -1518,13 +1518,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (item.opened != false) return
         val gen = graph.library.generation()
-        val change = graph.library.nextOpenedChange()
         val turn = OpenedTurn(listOf(item.id))
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                graph.library.markOpenedLocally(item.id, gen, change)
+                graph.library.markOpenedLocally(item.id, gen, turn.change)
                 turn.waitForEarlier()
-                runCatching { graph.api()?.markOpened(item.id) }
+                val told = runCatching { (graph.api() ?: throw NotPairedException()).markOpened(item.id) }.isSuccess
+                // The server has it read now: a change after this that it refuses goes back to read.
+                if (told) graph.library.confirmOpenedLocally(listOf(item.id), true, gen, turn.change)
             } finally {
                 turn.done()
             }
@@ -1538,11 +1539,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     private val openedRequests = java.util.concurrent.ConcurrentHashMap<String, Job>()
 
-    /** A place in that line for [ids], taken when the change is made, before anything waits. */
+    /**
+     * A place in that line for [ids], taken when the change is made, before anything waits, with the change's number
+     * ([change]). Both are taken under one lock, so a later number is always later in line, whichever thread makes it.
+     */
     private inner class OpenedTurn(ids: Collection<String>) {
         private val mine: Map<String, CompletableJob> = ids.associateWith { Job() }
-        private val earlier: Map<String, Job> = buildMap {
-            mine.forEach { (id, job) -> openedRequests.put(id, job)?.let { put(id, it) } }
+        private val earlier = HashMap<String, Job>()
+        val change: Long = synchronized(openedRequests) {
+            mine.forEach { (id, job) -> openedRequests.put(id, job)?.let { earlier[id] = it } }
+            graph.library.nextOpenedChange()
         }
 
         /** Waits until the requests made before this one for [ids] are answered. */
@@ -1565,35 +1571,40 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Mark as read or Mark as unread for one recording (its menu, contract 2.0.0-t): the dot goes or comes back here at
      * once, and the server is told. Unlike opening it, this is not an opening for Sort by Recently opened. When the
-     * server doesn't take it (no connection, a refusal, an older server's 405) the row goes back as it was and the
-     * failure is the result, for its words; a recording gone from the server brings a sync. It runs in the view
+     * server doesn't take it (no connection, a refusal, an older server's 405) the row goes back to what the server has
+     * and the failure is the result, for its words; a recording gone from the server brings a sync. It runs in the view
      * model's scope, so leaving the page doesn't cut it short.
      */
     suspend fun markReadAs(item: LibraryItem, read: Boolean): Result<Unit> {
         if ((item.opened != false) == read) return Result.success(Unit)
         val gen = graph.library.generation()
-        val change = graph.library.nextOpenedChange()
         val turn = OpenedTurn(listOf(item.id))
         return viewModelScope.async(Dispatchers.IO) {
-            graph.library.setOpenedLocally(listOf(item.id), read, gen, change)
-            val failure = try {
+            // All of it inside: whatever happens, even the local write failing, the next change to it may go.
+            try {
+                graph.library.setOpenedLocally(listOf(item.id), read, gen, turn.change)
                 turn.waitForEarlier()
-                val api = graph.api() ?: throw NotPairedException()
-                if (read) api.markOpened(item.id) else api.markUnopened(item.id)
-                null
-            } catch (e: ApiException) {
-                e
-            } catch (e: IOException) {
-                // No connection, or not signed in any more (a NotPairedException is one too).
-                e
+                val failure = try {
+                    val api = graph.api() ?: throw NotPairedException()
+                    if (read) api.markOpened(item.id) else api.markUnopened(item.id)
+                    null
+                } catch (e: ApiException) {
+                    e
+                } catch (e: IOException) {
+                    // No connection, or not signed in any more (a NotPairedException is one too).
+                    e
+                }
+                if (failure == null) {
+                    graph.library.confirmOpenedLocally(listOf(item.id), read, gen, turn.change)
+                    return@async Result.success(Unit)
+                }
+                // Back to what the server has, unless a newer change came to it meanwhile.
+                graph.library.undoOpenedLocally(item.id, turn.change, gen)
+                if ((failure as? ApiException)?.status == 404) syncSoon()
+                Result.failure(failure)
             } finally {
                 turn.done()
             }
-            if (failure == null) return@async Result.success(Unit)
-            // Back as it was, unless a newer change came to it meanwhile.
-            graph.library.undoOpenedLocally(item.id, !read, change, gen)
-            if ((failure as? ApiException)?.status == 404) syncSoon()
-            Result.failure(failure)
         }.await()
     }
 
@@ -1617,11 +1628,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     suspend fun setOpened(ids: List<String>, opened: Boolean): OpenedRun {
         val all = ids.distinct()
-        val change = graph.library.nextOpenedChange()
         val turn = OpenedTurn(all)
         return viewModelScope.async(Dispatchers.IO) {
             try {
-                runOpened(all, opened, change, turn)
+                runOpened(all, opened, turn)
             } finally {
                 turn.done()
             }
@@ -1629,7 +1639,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** [setOpened]'s run: each part waits for the requests made before it for the same recordings. */
-    private suspend fun runOpened(all: List<String>, opened: Boolean, change: Long, turn: OpenedTurn): OpenedRun {
+    private suspend fun runOpened(all: List<String>, opened: Boolean, turn: OpenedTurn): OpenedRun {
         val api = graph.api() ?: return OpenedRun(emptySet(), emptySet(), all, NotPairedException())
         val gen = graph.library.generation()
         val done = LinkedHashSet<String>()
@@ -1658,7 +1668,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     done += did
                     gone += answer.notFound.filter { it in chunk }
                     // Only the asked ones change here, whatever else the server's list holds.
-                    graph.library.setOpenedLocally(did, opened, gen, change)
+                    graph.library.confirmOpenedLocally(did, opened, gen, turn.change)
                     turn.done(chunk)
                     continue@run
                 }
@@ -1683,7 +1693,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             turn.done(chunk)
         }
-        if (oneByOne) graph.library.setOpenedLocally(done, opened, gen, change)
+        if (oneByOne) graph.library.confirmOpenedLocally(done, opened, gen, turn.change)
         if (gone.isNotEmpty()) syncSoon()
         return OpenedRun(done, gone, all.filter { it !in done && it !in gone }, failure)
     }
