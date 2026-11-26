@@ -5,7 +5,7 @@
 // Urdu piece in an English sentence. A link's state for a check is its id (linkStatus, requestStatus), never its words.
 import type { FilingRule, LibraryItem, RequestLink, RuleKind, ShareLink } from "./ipc";
 import type { ConfirmQuestion } from "./confirm";
-import { formatWhen, SOURCE_APP_LABELS } from "./format";
+import { formatWhen, sourceAppLabel } from "./format";
 import { choose, fill, t as windowWords, tc as windowCounts, type Lang, type Values } from "../i18n";
 
 /**
@@ -131,10 +131,13 @@ export const RULE_APPS: readonly string[] = [
   "messenger", "instagram", "skype", "slack", "discord", "phone_call", "voice_note",
 ];
 
-/** A filing rule in words: "Title contains “Acme”", "From Zoom", "Contact +92 300 1234567". */
+/**
+ * A filing rule in words: "Title contains “Acme”", "From Zoom", "Contact +92 300 1234567". An app is named in the same
+ * language as the line (sourceAppLabel: "Phone call" and "Voice note" are words), so a line is never half one language.
+ */
 export function ruleText(rule: Pick<FilingRule, "kind" | "value">, lang?: Lang): string {
   const { t } = wordsIn(lang);
-  if (rule.kind === "app") return t("From :app", { app: SOURCE_APP_LABELS[rule.value] ?? rule.value });
+  if (rule.kind === "app") return t("From :app", { app: sourceAppLabel(rule.value, lang) });
   if (rule.kind === "contact") return t("Contact :contact", { contact: rule.value });
   return t("Title contains “:text”", { text: rule.value });
 }
@@ -150,7 +153,7 @@ export function filedByRuleText(item: Pick<LibraryItem, "title" | "source_app">,
   const byTitle = rules?.find((r) => r.kind === "title" && r.value.trim() !== "" && title.includes(r.value.trim().toLowerCase()));
   if (byTitle) return t("Filed by rule: title contains :text", { text: byTitle.value.trim() });
   const byApp = rules?.find((r) => r.kind === "app" && r.value === item.source_app);
-  if (byApp) return t("Filed by rule: from :app", { app: SOURCE_APP_LABELS[byApp.value] ?? byApp.value });
+  if (byApp) return t("Filed by rule: from :app", { app: sourceAppLabel(byApp.value, lang) });
   return t("Filed by a rule");
 }
 

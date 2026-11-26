@@ -238,10 +238,16 @@ fun LiveTranslatePage(vm: MainViewModel, mode: TranslateMode, onSetup: () -> Uni
                         text = feed?.let {
                             it.notice ?: it.shown.ifBlank { "…" }
                         },
-                        original = feed?.shownOriginal?.ifBlank { null }
+                        original = feed?.shownOriginal?.ifBlank { null },
+                        notice = feed?.notice != null
                     )
                 } else {
-                    SubtitlePreview(settings.liveTranslate.watch.style, target, text = feed?.let { it.notice ?: it.shown.ifBlank { "…" } })
+                    SubtitlePreview(
+                        settings.liveTranslate.watch.style,
+                        target,
+                        text = feed?.let { it.notice ?: it.shown.ifBlank { "…" } },
+                        notice = feed?.notice != null
+                    )
                 }
                 EchoButton(if (feed == null) "Test translate" else "Test again", { vm.testTranslate(mode) }, kind = ButtonKind.Secondary)
                 Text(TranslateCost.estimate(), style = type.caption, color = c.textMuted)

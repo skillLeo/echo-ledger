@@ -8,10 +8,14 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
@@ -27,6 +31,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModelProvider
 import com.echoledger.mobile.MainActivity
@@ -390,6 +395,27 @@ class SettingsScreenTest : AppTest() {
         pumpUntil("second client saved") { settings().clientId == "01JCLIENT0000000000000000B" }
         compose.onNodeWithText("No project").performClick()
         pumpUntil("client cleared") { settings().clientId == null }
+    }
+
+    /** P-052: the project picker was "●"/"○" drawn as text in 30 dp rows; TalkBack heard no radio and no chosen state. */
+    @Test
+    fun `the keyterms project picker is radios that say which one is chosen, each a full row`() {
+        pairAndSettle()
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
+        server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
+        val refresh = vm.refresh()
+        pumpUntil("clients") { refresh.isCompleted && vm.clients.value.size == 2 }
+        launch(open = "Custom words")
+
+        val radio = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
+        compose.onNode(hasText("No project") and radio).assertIsSelected()
+        compose.onNode(hasText("Acme Holdings") and radio).assertIsNotSelected()
+        val row = compose.onNode(hasText("Acme Holdings") and radio).fetchSemanticsNode()
+        assertTrue("a 48 dp row: ${row.size}", row.size.height >= with(compose.density) { 48.dp.toPx() } - 1)
+        compose.onNode(hasText("Acme Holdings") and radio).performClick()
+        pumpUntil("chosen") { settings().clientId == "01JCLIENT0000000000000000A" }
+        compose.onNode(hasText("Acme Holdings") and radio).assertIsSelected()
+        compose.onNode(hasText("No project") and radio).assertIsNotSelected()
     }
 
     // ---- device card -----------------------------------------------------------------------------------------------------------

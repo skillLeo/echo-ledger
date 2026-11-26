@@ -121,7 +121,7 @@ try {
       await page.waitForTimeout(400);
     };
     await dialog("rename-dialog", () => page.locator(".el-recording__title").click(), "نام بدلیں", "خالی چھوڑ دیں");
-    await dialog("whatsapp-dialog", () => page.getByRole("button", { name: "واٹس ایپ پر بھیجیں…" }).click(), "واٹس ایپ پر بھیجیں", "صرف متن");
+    await dialog("whatsapp-dialog", () => page.getByRole("button", { name: "WhatsApp پر بھیجیں…" }).click(), "WhatsApp پر بھیجیں", "صرف متن");
     await dialog("language-dialog", async () => {
       await page.getByRole("button", { name: "ریکارڈنگ کے اختیارات" }).click();
       await page.getByRole("menuitem", { name: "زبان بدلیں اور دوبارہ ٹرانسکرائب کریں…" }).click();

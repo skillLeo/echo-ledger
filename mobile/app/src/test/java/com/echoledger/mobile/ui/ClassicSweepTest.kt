@@ -81,8 +81,8 @@ data class SweepCondition(val name: String, val urdu: Boolean = false, val known
     }
 
     companion object {
-        /** Cut for now, on every condition: Game and Watch translate's sample line in its 16:9 preview at large text (S3). */
-        val KNOWN = mapOf("\"Come on guys, the enemy is at the red house\"" to "P-119")
+        /** Cut for now, on every condition, each with its bug: none (P-119's preview line grows its frame now). */
+        val KNOWN: Map<String, String> = emptyMap()
 
         /** Texts that may break inside a word (never be cut): Setup's adb command is copied with its button, not read. */
         val WRAPS_ANYWHERE = listOf("\"adb shell ")

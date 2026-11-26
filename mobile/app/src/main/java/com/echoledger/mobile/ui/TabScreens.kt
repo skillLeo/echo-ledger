@@ -136,6 +136,13 @@ fun ActivityScreen(
         }
     }
 
+    /**
+     * P-043: a problem with nowhere to go (no recording) isn't a button, so while unread it has a quiet Mark read; seeing
+     * it never clears it. An informational one was marked read once seen.
+     */
+    fun markable(item: ActivityItemDto): (() -> Unit)? =
+        { open(item) }.takeIf { item.sessionId == null && !item.read && item.id !in seenMarked }
+
     /** A missed recording looked at or swiped away: the server's copy of it is read too. */
     fun settleMissed(item: MissedItem, dismiss: Boolean) {
         if (dismiss) onMissedDismiss(item.ref) else onMissedRead(item.ref)
@@ -235,7 +242,7 @@ fun ActivityScreen(
             }
             itemsIndexed(needsAction, key = { _, it -> "a-${it.id}" }) { i, row ->
                 DismissibleRow(onDismiss = { dismiss(row) }) {
-                    ActivityRow(row, today, divider = i < needsAction.lastIndex) { open(row) }
+                    ActivityRow(row, today, divider = i < needsAction.lastIndex, onMarkRead = markable(row)) { open(row) }
                 }
             }
         }
@@ -263,7 +270,7 @@ fun ActivityScreen(
                     } else {
                         val item = row as ActivityItemDto
                         DismissibleRow(onDismiss = { dismiss(item) }) {
-                            ActivityRow(item, today, divider = i < rows.lastIndex) { open(item) }
+                            ActivityRow(item, today, divider = i < rows.lastIndex, onMarkRead = markable(item)) { open(item) }
                         }
                     }
                 }
@@ -426,7 +433,13 @@ object ActivityBadge {
 }
 
 @Composable
-private fun ActivityRow(item: ActivityItemDto, today: LocalDate, divider: Boolean = true, onClick: () -> Unit) {
+private fun ActivityRow(
+    item: ActivityItemDto,
+    today: LocalDate,
+    divider: Boolean = true,
+    onMarkRead: (() -> Unit)? = null,
+    onClick: () -> Unit
+) {
     val c = LocalEchoColors.current
     val kind = item.kind.orEmpty()
     val (icon, tint) = when {
@@ -440,10 +453,12 @@ private fun ActivityRow(item: ActivityItemDto, today: LocalDate, divider: Boolea
         time = rowTime(item.at, today),
         meta = item.body,
         tile = { IconTile(icon, tint) },
-        onClick = onClick,
+        // P-043: only an item with a recording opens something; one with nowhere to go (a new device) isn't a button.
+        onClick = onClick.takeIf { item.sessionId != null },
         onLongClick = onClick,
         unopened = !item.read,
-        divider = divider
+        divider = divider,
+        trailing = onMarkRead?.let { mark -> { EchoButton("Mark read", mark, kind = ButtonKind.Text) } }
     )
 }
 

@@ -1,7 +1,9 @@
 package com.echoledger.mobile.data
 
 import android.content.Context
+import com.echoledger.mobile.core.LibraryFacets
 import java.io.File
+import java.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -109,7 +111,7 @@ class LibraryRepository(
      * kept (the cache written) only when they changed. Throws like [refresh] when the server can't be reached; the
      * last ones stay.
      */
-    suspend fun refreshWaiting() {
+    suspend fun refreshWaiting(now: Instant = Instant.now()) {
         val (g, asked) = synchronized(this) { gen to ++waitingAsked }
         val client = api() ?: return
         val found = mutableListOf<LibraryItem>()
@@ -117,7 +119,8 @@ class LibraryRepository(
         var pages = 0
         do {
             val page = client.library(since = null, cursor = cursor, status = "recording")
-            found += page.data.filter { !it.deleted && it.status == "recording" }
+            // Contract 2.0.0-z: a call over and waiting, never one still being recorded on another device.
+            found += page.data.filter { !it.deleted && LibraryFacets.isWaiting(it, now) }
             cursor = page.nextCursor?.takeIf { it != cursor }
         } while (cursor != null && ++pages < MAX_WAITING_PAGES)
         val next = found.distinctBy { it.id }

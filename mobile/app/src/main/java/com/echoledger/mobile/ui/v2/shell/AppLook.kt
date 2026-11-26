@@ -21,6 +21,43 @@ object AppLook {
         else -> 1f
     }
 
+    /** The languages the app speaks. */
+    private val SPOKEN = setOf("en", "ur")
+
+    /**
+     * The language to speak, as a choice ("en", "ur", or "system" for the phone's), for everything the app writes.
+     * Signed in, the account's (its `language`, the same on every device; the last one known on this phone while it
+     * loads or can't be read), else English: never the phone's own, nor a choice made while signed out. Signed out, the
+     * choice made then in Settings, which may follow the phone. The desktop's rule too (src/i18n/language.ts).
+     */
+    fun choice(s: com.echoledger.mobile.data.AppSettings): String = if (s.paired) {
+        s.accountLanguage?.takeIf { it in SPOKEN } ?: "en"
+    } else {
+        s.appLanguage
+    }
+
+    /**
+     * The language of the last settings this process saw, kept in a small file of its own so the first words after a
+     * cold start (a notification, a card over another app) are the person's before the settings store has answered.
+     */
+    @Volatile var lastKnown: String? = null
+        private set
+
+    private const val LOOK_PREFS = "app_look"
+    private const val LOOK_LANGUAGE = "language"
+
+    /** Reads the kept language (Application.onCreate, as DesignChoice.load). */
+    fun load(context: android.content.Context) {
+        lastKnown = context.getSharedPreferences(LOOK_PREFS, android.content.Context.MODE_PRIVATE).getString(LOOK_LANGUAGE, null)
+    }
+
+    /** Keeps [choice] for the next cold start (each saved change of the settings). */
+    fun keep(context: android.content.Context, choice: String) {
+        if (lastKnown == choice) return
+        lastKnown = choice
+        context.getSharedPreferences(LOOK_PREFS, android.content.Context.MODE_PRIVATE).edit().putString(LOOK_LANGUAGE, choice).apply()
+    }
+
     /** The app's language: `en` or `ur` as chosen, else the phone's ([system]). */
     fun language(choice: String, system: EchoLanguage): EchoLanguage = when (choice) {
         "en" -> EchoLanguage.English
@@ -64,9 +101,11 @@ fun OverlayLook(
     }
     if (stored == null && !waited) return
     val look = stored ?: com.echoledger.mobile.data.AppSettings()
+    // The store not answering yet: the language kept at the last save, else English (never the phone's while signed in).
+    val choice = stored?.let(AppLook::choice) ?: AppLook.lastKnown ?: "en"
     com.echoledger.mobile.ui.v2.theme.EchoV2Theme(
         darkTheme = dark,
-        language = AppLook.language(look.appLanguage, com.echoledger.mobile.ui.v2.theme.systemEchoLanguage()),
+        language = AppLook.language(choice, com.echoledger.mobile.ui.v2.theme.systemEchoLanguage()),
         phoneFont = false
     ) {
         AppLook.TextSize(look.textSize, content)

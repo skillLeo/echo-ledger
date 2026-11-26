@@ -117,6 +117,7 @@ class HeaderShotsTest : ScreenTest() {
         for ((d, l, s) in variants) {
             dark = d
             language = l
+            speak(l)
             scale = s
             round++
             compose.waitForIdle()

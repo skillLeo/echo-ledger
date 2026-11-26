@@ -47,6 +47,7 @@ import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.data.OpenSessionRequest
 import com.echoledger.mobile.data.SegmentDto
 import com.echoledger.mobile.data.UsageReport
+import com.echoledger.mobile.net.CallEndWorker
 import com.echoledger.mobile.net.CaptionTokens
 import com.echoledger.mobile.net.DiscardWorker
 import com.echoledger.mobile.net.SttEvent
@@ -1539,6 +1540,16 @@ class RecordingService : LifecycleService() {
                 stored.serverSessionId?.let { sessionId ->
                     DiscardWorker.enqueue(this, stored.id, sessionId)
                     graph.recordings.update(stored.id) { it.copy(serverSessionId = null) }
+                }
+            }
+            // Contract 2.0.0-z: the end of a call whose choice now waits (its card, or held for the Phone app's copy)
+            // reaches the session the captions opened at once, before the card shows, so every device sees it waiting.
+            // Not for one being deleted (no sound, skipped, Stop and delete), nor one kept at once or not a call: its
+            // upload's finish carries the end. Best-effort: it never stops the card or the rest.
+            if (stored != null && !silent && skip == null && deleteAtMs == null) {
+                val waiting = graph.recordings.get(stored.id)?.state == "pending_decision"
+                stored.serverSessionId?.takeIf { waiting }?.let { sessionId ->
+                    runCatching { CallEndWorker.enqueue(this, stored.id, sessionId, endedMs, stored.durationMs) }
                 }
             }
             val themeMode = settings.themeMode

@@ -1459,8 +1459,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const listSpaceMenu = (): MenuItem[] => {
     const ctx: ActionContext = { platform: currentPlatform(), kind: "list", state: { layoutList: layout === "list", layoutTable: layout === "table" } };
     return contextItems(LIST_SPACE, ctx, {
-      "view.sortBy": choiceItems("view.sortBy", SORT_ORDER.map((k: SortKey) => ({ value: k, label: appWords(t(SORT_NAMES[k]), ctx.platform), checked: choice.sort === k })), ctx).map(oneOf),
-      "view.groupBy": choiceItems("view.groupBy", GROUP_ORDER.map((k) => ({ value: k, label: appWords(t(GROUP_NAMES[k]), ctx.platform), checked: choice.group === k })), ctx).map(oneOf),
+      "view.sortBy": choiceItems("view.sortBy", SORT_ORDER.map((k: SortKey) => ({ value: k, label: appWords(SORT_NAMES[k], ctx.platform), checked: choice.sort === k })), ctx).map(oneOf),
+      "view.groupBy": choiceItems("view.groupBy", GROUP_ORDER.map((k) => ({ value: k, label: appWords(GROUP_NAMES[k], ctx.platform), checked: choice.group === k })), ctx).map(oneOf),
       "view.density": choiceItems("view.density", DENSITIES.map(([d, label]) => ({ value: d, label: appWords(t(label), ctx.platform), checked: density === d })), ctx).map(oneOf),
     }, LIBRARY_KEYS);
   };
@@ -1720,8 +1720,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     { label: t("List"), group: t("Show as"), checked: layout === "list", radio: true, onPick: () => setLayout("list") },
     { label: t("Table"), group: t("Show as"), checked: layout === "table", radio: true, onPick: () => setLayout("table") },
     ...(layout === "table" ? [{ label: t("Columns"), group: t("Show as"), icon: Icons.ColumnsIcon, items: columnsMenu(columns, setColumns) }] : []),
-    ...SORT_ORDER.map((k: SortKey) => ({ label: t(SORT_NAMES[k]), group: t("Sort"), checked: choice.sort === k, radio: true, onPick: () => setChoice({ ...choice, sort: k }) })),
-    ...GROUP_ORDER.map((k) => ({ label: t(GROUP_NAMES[k]), group: t("Group by"), checked: choice.group === k, radio: true, onPick: () => setChoice({ ...choice, group: k }) })),
+    ...SORT_ORDER.map((k: SortKey) => ({ label: SORT_NAMES[k], group: t("Sort"), checked: choice.sort === k, radio: true, onPick: () => setChoice({ ...choice, sort: k }) })),
+    ...GROUP_ORDER.map((k) => ({ label: GROUP_NAMES[k], group: t("Group by"), checked: choice.group === k, radio: true, onPick: () => setChoice({ ...choice, group: k }) })),
     ...DENSITIES.map(([d, label]) => ({ label: t(label), group: t("Density"), checked: density === d, radio: true, onPick: () => setDensity(d) })),
   ];
   const viewEmpty = scope.kind === "view" ? emptyView(scope.view) : undefined;
@@ -1798,7 +1798,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                       setTab(next);
                       (e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[tabsShown.indexOf(next)])?.focus();
                     }}>
-                    {t(LIBRARY_TAB_NAMES[kind])}<span className="el-lib-tabs__count el-num" aria-label={`, ${tabCount[kind]}`}>{tabCount[kind]}</span>
+                    {LIBRARY_TAB_NAMES[kind]}<span className="el-lib-tabs__count el-num" aria-label={`, ${tabCount[kind]}`}>{tabCount[kind]}</span>
                   </button>
                 ))}
               </div>
@@ -1810,7 +1810,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                 </Button>
                 <Menu label={t("Sort & display")} items={displayMenu}
                   button={{ variant: "quiet", size: "sm", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, text: row2Fit.labels ? t("Sort & display") : undefined,
-                    title: t("Sort & display: :sort · Group: :group", { sort: t(SORT_NAMES[choice.sort]), group: t(GROUP_NAMES[choice.group]) }) }} />
+                    title: t("Sort & display: :sort · Group: :group", { sort: SORT_NAMES[choice.sort], group: GROUP_NAMES[choice.group] }) }} />
               </div>
             </div>
           )}

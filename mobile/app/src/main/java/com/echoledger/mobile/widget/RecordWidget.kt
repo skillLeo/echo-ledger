@@ -386,7 +386,7 @@ object WidgetStateStore {
         // (since v1.6) a recording is named by its app only and no transcript text is kept.
         val shown = if (settings.appLockEnabled) emptyList() else graph.library.items.value.filter { !it.deleted }
         val latest = shown.firstOrNull()
-        val words = com.echoledger.mobile.notify.AppWords.resources(context, settings.appLanguage)
+        val words = com.echoledger.mobile.notify.AppWords.resources(context, com.echoledger.mobile.ui.v2.shell.AppLook.choice(settings))
         save(
             context,
             WidgetState(
@@ -400,7 +400,7 @@ object WidgetStateStore {
                 dynamicColour = settings.dynamicColour,
                 recent = recentRows(shown, settings.widgetHideTitles, java.time.LocalDate.now(), words),
                 ready = com.echoledger.mobile.recording.ReadinessWatch.lastChip(context),
-                language = settings.appLanguage,
+                language = com.echoledger.mobile.ui.v2.shell.AppLook.choice(settings),
                 textSize = settings.textSize
             )
         )

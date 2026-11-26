@@ -33,7 +33,10 @@ class ParityShots(private val compose: ComposeContentTestRule) {
         private set
     var language by mutableStateOf(EchoLanguage.English)
         private set
-    private var classicSide by mutableStateOf(true)
+
+    /** Which side is drawn now: classic's, or the new design's. */
+    var classicSide by mutableStateOf(true)
+        private set
 
     /**
      * Draws [classic] and [v2] in every variant, or in [only] those ("light-en", "dark-ur" …); [each] runs after each

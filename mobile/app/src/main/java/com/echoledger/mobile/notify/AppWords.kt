@@ -33,10 +33,15 @@ object AppWords {
 
     /**
      * The resources of the person's app language, from the app's hot copy of the settings (read as the app starts);
-     * the phone's language until then. It never reads the store itself: it is asked from the main thread.
+     * until then the language kept at the last save ([com.echoledger.mobile.ui.v2.shell.AppLook.lastKnown]), else
+     * English. It never reads the store itself: it is asked from the main thread.
      */
     fun resources(context: Context): Resources {
         val graph = (context.applicationContext as? EchoLedgerApp)?.graph ?: return context.resources
-        return resources(context, graph.liveSettings.value?.appLanguage)
+        return resources(context, choiceOf(graph.liveSettings.value, com.echoledger.mobile.ui.v2.shell.AppLook.lastKnown))
     }
+
+    /** The language to write in: the settings' when read ([live]), else the one kept at the last save ([kept]), else English. */
+    fun choiceOf(live: com.echoledger.mobile.data.AppSettings?, kept: String?): String =
+        live?.let(com.echoledger.mobile.ui.v2.shell.AppLook::choice) ?: kept ?: "en"
 }
