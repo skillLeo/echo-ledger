@@ -95,7 +95,7 @@ export function RecordSection({ status, run, onImport }: { status: AppStatus; ru
     <section className="el-group el-record" aria-label={t("Record")}>
       <PermissionBanners recordingRef={recording?.clientRef ?? null} />
       {status.systemAudioNote && <Banner tone="warning" icon={Icons.WarningIcon} testId="whole-system-note">{status.systemAudioNote}.</Banner>}
-      <Card className="el-record__now" label={t("Recording now")}>
+      <Card className="el-record__current" label={t("Recording now")}>
         <Status kind={recording ? "recording" : "idle"} live>{recordingLine(status)}</Status>
         {recording && (
           <div className="el-record__controls" role="group" aria-label={t("Recording controls")}>
