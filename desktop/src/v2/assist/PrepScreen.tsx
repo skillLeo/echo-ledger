@@ -216,7 +216,7 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted, lang }: {
               {files.map((f) => (
                 // A file's name is as it is: in its own isolate inside a right-to-left window.
                 <Checkbox key={f.id} label={rtl ? <bdi>{f.name}</bdi> : f.name} checked={attached.has(f.id)} disabled={busy === `file-${f.id}`}
-                  hint={f.pages ? tc(":count pages", f.pages) : undefined} onChange={(e) => void toggleFile(f, e.target.checked)} />
+                  hint={f.pages ? tc(":count page|:count pages", f.pages) : undefined} onChange={(e) => void toggleFile(f, e.target.checked)} />
               ))}
             </fieldset>
           )}
