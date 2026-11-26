@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.NotificationsNone
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -444,15 +445,29 @@ private fun ActivityRow(
     val kind = item.kind.orEmpty()
     val (icon, tint) = when {
         kind == "missed_recording" -> Icons.AutoMirrored.Rounded.PhoneMissed to c.danger
+
         item.isProblem() -> Icons.Rounded.ErrorOutline to c.danger
+
+        // A warning keeps its own sign (decision 27); the neutral bell, not a check, for what isn't done.
+        kind == "unusual_usage" -> Icons.Rounded.WarningAmber to c.warning
+
         kind.contains("device") -> Icons.Rounded.Devices to c.textMuted
-        else -> Icons.Rounded.CheckCircle to c.accentText
+
+        kind == "transcript_ready" -> Icons.Rounded.CheckCircle to c.accentText
+
+        else -> Icons.Rounded.NotificationsNone to c.textMuted
     }
     RecordingRow(
         title = item.title.ifBlank { "Update" },
         time = rowTime(item.at, today),
         meta = item.body,
-        tile = { IconTile(icon, tint) },
+        // 2.0.0-aa: the person the item is about, for the kinds that show a face; else the kind's tile.
+        tile = {
+            com.echoledger.mobile.ui.v2.activity.ActivityPeople.shownPerson(item)?.let {
+                com.echoledger.mobile.ui.v2.activity.ActorAvatar(it, size = 44.dp, classic = true)
+            }
+                ?: IconTile(icon, tint)
+        },
         // P-043: only an item with a recording opens something; one with nowhere to go (a new device) isn't a button.
         onClick = onClick.takeIf { item.sessionId != null },
         onLongClick = onClick,

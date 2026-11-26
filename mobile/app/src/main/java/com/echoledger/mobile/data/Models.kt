@@ -1162,8 +1162,59 @@ data class ActivityItemDto(
      * value (the phone shows its own sentence for it; the server keeps no free text).
      */
     val reason: String? = null,
-    @SerialName("missed_recording_id") val missedRecordingId: String? = null
+    @SerialName("missed_recording_id") val missedRecordingId: String? = null,
+    /**
+     * Since 2.0.0-aa: the person the item is about (a recording's sender, an upgrade asked for), whose picture or
+     * initials take the kind's icon's place for [com.echoledger.mobile.ui.v2.activity.ActivityPeople.KINDS]. Null for
+     * every other item, from an older server (no key) and for one that can't be read, which never costs the item.
+     */
+    @Serializable(with = LenientActor::class) val actor: ActorDto? = null
 )
+
+/** The person an Activity item is about (contract 2.0.0-aa), as the API shows people (2.0.0-l and 2.0.0-r §6). */
+@Serializable
+data class ActorDto(
+    val id: Long? = null,
+    val name: String? = null,
+    /** Their picture's signed address; null shows the initials. */
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    /** Changes only when the picture does: the phone keeps one copy per version. */
+    @SerialName("avatar_version") val avatarVersion: Long? = null,
+    /** The colour of their initials' circle, 0 to 7; null or out of range: [com.echoledger.mobile.ui.v2.activity.ActivityPeople.colourOf]. */
+    @SerialName("avatar_color") val avatarColor: Int? = null
+)
+
+/**
+ * `actor` read leniently, as the desktop's core does: an object whose `name` is text or null is a person; its id may be
+ * a number or digits, and a field of another type is left out. Anything else ("Ana", a list, a number for a name) is no
+ * person, so the item keeps its icon and the Activity list never fails to read.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+object LenientActor : kotlinx.serialization.KSerializer<ActorDto?> {
+    override val descriptor = ActorDto.serializer().descriptor.nullable
+
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): ActorDto? {
+        val json = decoder as? kotlinx.serialization.json.JsonDecoder ?: return ActorDto.serializer().deserialize(decoder)
+        val o = json.decodeJsonElement() as? kotlinx.serialization.json.JsonObject ?: return null
+        fun primitive(key: String) = o[key] as? kotlinx.serialization.json.JsonPrimitive
+        val name = o["name"]
+        if (name != null && name !is kotlinx.serialization.json.JsonNull && primitive("name")?.isString != true) return null
+        val number = { key: String -> primitive(key)?.takeUnless { it.isString || it is kotlinx.serialization.json.JsonNull }?.content }
+        return ActorDto(
+            id = primitive("id")?.takeUnless {
+                it is kotlinx.serialization.json.JsonNull
+            }?.content?.takeIf { id -> id.all(Char::isDigit) }?.toLongOrNull(),
+            name = primitive("name")?.takeIf { it.isString }?.content,
+            avatarUrl = primitive("avatar_url")?.takeIf { it.isString }?.content?.ifBlank { null },
+            avatarVersion = number("avatar_version")?.toLongOrNull(),
+            avatarColor = number("avatar_color")?.toIntOrNull()
+        )
+    }
+
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: ActorDto?) {
+        if (value == null) encoder.encodeNull() else encoder.encodeSerializableValue(ActorDto.serializer(), value)
+    }
+}
 
 /** `POST /api/devices/missed-recordings` (since v1.8): the server's id for the report. */
 @Serializable
