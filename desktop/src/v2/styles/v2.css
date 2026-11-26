@@ -316,8 +316,13 @@
    it, and a first or last letter's stroke reaches past the line's ends, so in Urdu the clip box takes room on every side
    (12 px above, 8 px at each end, 4 px below) that its margins give back: the row's layout is unchanged and the ink
    stays inside the box (measured: scripts/urduD261.mjs). */
-/* A Select's chosen value clips the same way (D-264: "کوئی پروجیکٹ نہیں" lost its kāf's top on the prep screen). */
-:lang(ur) :is(.el-row__title, .el-row__meta-text, .el-select__value) {
+:lang(ur) :is(.el-row__title, .el-row__meta-text) {
+  padding: var(--el-space-12) var(--el-space-8) var(--el-space-4);
+  margin: calc(-1 * var(--el-space-12)) calc(-1 * var(--el-space-8)) calc(-1 * var(--el-space-4));
+}
+/* A Select's chosen value clips the same way, so it takes the same room (D-264: "کوئی پروجیکٹ نہیں" lost its kāf's top on
+   the prep screen). */
+:lang(ur) .el-select__value {
   padding: var(--el-space-12) var(--el-space-8) var(--el-space-4);
   margin: calc(-1 * var(--el-space-12)) calc(-1 * var(--el-space-8)) calc(-1 * var(--el-space-4));
 }
@@ -996,7 +1001,7 @@ button.el-step__head { cursor: pointer; }
 /* ---- Live Assist card (a floating layer) ------------------------------------------------------------------- */
 /* The card never grows past its window (D-264: Urdu's taller lines made it, and the captions strip fell below the window's
    edge): it is as tall as its words up to the window, and past that its suggestion scrolls, the bar and the captions in sight. */
-.el-assist-root { display: flex; justify-content: center; align-items: flex-start; box-sizing: border-box; block-size: 100vh; padding: var(--el-space-8); }
+.el-assist-root { position: fixed; inset: 0; display: flex; justify-content: center; align-items: flex-start; box-sizing: border-box; padding: var(--el-space-8); }
 .el-assist {
   display: flex; flex-direction: column; gap: var(--el-space-8); box-sizing: border-box; max-block-size: 100%;
   inline-size: 100%; max-inline-size: calc(var(--el-space-64) * 8);
