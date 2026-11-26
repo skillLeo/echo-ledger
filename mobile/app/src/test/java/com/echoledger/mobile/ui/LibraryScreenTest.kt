@@ -696,4 +696,26 @@ class LibraryScreenTest : ScreenTest() {
         pumpUntil("unmarked") { vm.message.value == "1 recording marked as unread" }
         assertEquals(1, server.requestsTo("DELETE", "/api/sessions/opened").size)
     }
+
+    /** Review of 2.0.0-y: only what was done leaves the selection; a tick made while it ran stays. */
+    @Test
+    fun `a tick made while marking runs stays selected`() {
+        seed(item("a", title = "First call"), item("b", title = "Second call"), item("c", title = "Third call"))
+        val gate = server.hold()
+        server.on("POST", "/api/sessions/opened") {
+            gate.await(30)
+            FakeServer.json(200, """{"done":["a","b"],"not_found":[]}""")
+        }
+        showLibrary()
+        compose.onNodeWithText("First call").performTouchInput { longClick() }
+        compose.onNodeWithText("Second call").performClick()
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNodeWithText("Mark as read").performClick()
+        pumpUntil("on its way") { server.requestsTo("POST", "/api/sessions/opened").isNotEmpty() }
+        compose.onNodeWithText("Third call").performClick()
+        compose.onNodeWithText("3 selected").assertIsDisplayed()
+        gate.open()
+        pumpUntil("marked") { vm.message.value == "2 recordings marked as read" }
+        compose.onNodeWithText("1 selected").assertIsDisplayed()
+    }
 }

@@ -8,7 +8,6 @@ import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
-import com.echoledger.mobile.testsupport.pumpUntil
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.jsonArray
@@ -16,6 +15,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import mockwebserver3.MockResponse
 import mockwebserver3.RecordedRequest
+import mockwebserver3.SocketEffect
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -192,10 +192,36 @@ class MarkReadManyTest : ScreenTest() {
         seed(read = true)
         server.on("DELETE", "/api/sessions/01K001/opened", oneAnswer)
         server.on("POST", "/api/sessions/01K001/opened", oneAnswer)
-        val item = app.graph.library.items.value.first { it.id == "01K001" }
-        vm.markReadAs(item, read = false)
-        pumpUntil("unread") { opened("01K001") == false && server.requestsTo("DELETE", "/api/sessions/01K001/opened").isNotEmpty() }
-        vm.markReadAs(app.graph.library.items.value.first { it.id == "01K001" }, read = true)
-        pumpUntil("read") { opened("01K001") == true && server.requestsTo("POST", "/api/sessions/01K001/opened").isNotEmpty() }
+        assertTrue(runBlocking { vm.markReadAs(item("01K001"), read = false) }.isSuccess)
+        assertEquals(false, opened("01K001"))
+        assertEquals(1, server.requestsTo("DELETE", "/api/sessions/01K001/opened").size)
+        assertTrue(runBlocking { vm.markReadAs(item("01K001"), read = true) }.isSuccess)
+        assertEquals(true, opened("01K001"))
+        assertEquals(1, server.requestsTo("POST", "/api/sessions/01K001/opened").size)
     }
+
+    /** Review of 2.0.0-y: one the server doesn't take goes back as it was, and the failure is the result, for its words. */
+    @Test
+    fun `one recording the server doesn't take goes back as it was`() {
+        val answers = listOf(
+            405 to FakeServer.json(405, """{"message":"The DELETE method is not supported.","code":"method_not_allowed"}"""),
+            403 to FakeServer.json(403, """{"message":"You can't change this recording.","code":"forbidden"}"""),
+            503 to FakeServer.json(503, """{"message":"Down","code":"x"}"""),
+            // A connection closed before any answer (as ApiClientErrorHandlingTest).
+            0 to MockResponse.Builder().code(200).onResponseStart(SocketEffect.CloseSocket()).build()
+        )
+        for ((status, answer) in answers) {
+            seed(read = true)
+            server.on("DELETE", "/api/sessions/01K001/opened", answer)
+            val failure = runBlocking { vm.markReadAs(item("01K001"), read = false) }.exceptionOrNull()
+            assertEquals("$status: the dot is back", true, opened("01K001"))
+            if (status == 0) {
+                assertTrue("no connection: $failure", failure is java.io.IOException && failure !is ApiException)
+            } else {
+                assertEquals(status, (failure as ApiException).status)
+            }
+        }
+    }
+
+    private fun item(id: String) = app.graph.library.items.value.first { it.id == id }
 }

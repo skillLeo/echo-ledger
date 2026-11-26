@@ -509,7 +509,8 @@ fun V2LibraryScreen(
                 // Contract 2.0.0-y: what wasn't done stays selected, and the words say how many.
                 SelectionAction.MarkRead, SelectionAction.MarkUnread -> {
                     val run = vm.setOpened(ids, action == SelectionAction.MarkRead)
-                    picked = run.left.toSet()
+                    // Only what was done or is gone leaves: a tick changed meanwhile, or one a filter hides, stays.
+                    picked = picked - run.done - run.notFound
                     toasts.show(openedWords(res, run, action == SelectionAction.MarkRead))
                 }
             }
@@ -1646,14 +1647,31 @@ internal fun openedWords(
     selection: Boolean = true
 ): String {
     val marked = run.done.size
+    val failure = run.failure
     return when {
         run.left.isEmpty() ->
             res.getQuantityString(if (read) R.plurals.v2_lib_marked_read else R.plurals.v2_lib_marked_unread, marked, marked)
 
-        run.failure != null -> res.getString(R.string.v2_lib_marked_stopped, marked, run.total)
+        failure != null && marked == 0 -> openedProblem(res, failure, read)
+
+        failure != null -> res.getString(R.string.v2_lib_marked_stopped, marked, run.total, openedProblem(res, failure, read))
 
         selection -> res.getString(R.string.v2_lib_marked_some, marked, run.total, run.left.size)
 
         else -> res.getString(R.string.v2_lib_marked_some_again, marked, run.total)
     }
 }
+
+/**
+ * What stopped Mark as read or unread, in the screen's language: the connection only when there was none, an older
+ * server's 405 as needing a newer server, else the server's own words (or the general sentence).
+ */
+internal fun openedProblem(res: android.content.res.Resources, failure: Throwable, read: Boolean): String =
+    if ((failure as? com.echoledger.mobile.net.ApiException)?.status == 405) {
+        res.getString(if (read) R.string.v2_lib_read_needs_newer else R.string.v2_lib_unread_needs_newer)
+    } else {
+        com.echoledger.mobile.ui.v2.shell.VmMessages.localize(
+            res,
+            com.echoledger.mobile.core.Problems.text(failure, "The change could not be saved.")
+        )
+    }

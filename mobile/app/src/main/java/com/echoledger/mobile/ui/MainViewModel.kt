@@ -40,6 +40,7 @@ import java.io.IOException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -1510,15 +1511,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Mark as read or Mark as unread for one recording (its menu, contract 2.0.0-t): the dot goes or comes back here at
-     * once, and the server is told. Unlike opening it, this is not an opening for Sort by Recently opened.
+     * once, and the server is told. Unlike opening it, this is not an opening for Sort by Recently opened. When the
+     * server doesn't take it (no connection, a refusal, an older server's 405) the row goes back as it was and the
+     * failure is the result, for its words; a recording gone from the server brings a sync. It runs in the view
+     * model's scope, so leaving the page doesn't cut it short.
      */
-    fun markReadAs(item: LibraryItem, read: Boolean) {
-        if ((item.opened != false) == read) return
+    suspend fun markReadAs(item: LibraryItem, read: Boolean): Result<Unit> {
+        if ((item.opened != false) == read) return Result.success(Unit)
         val gen = graph.library.generation()
-        viewModelScope.launch(Dispatchers.IO) {
+        return viewModelScope.async(Dispatchers.IO) {
             graph.library.setOpenedLocally(listOf(item.id), read, gen)
-            runCatching { graph.api()?.let { if (read) it.markOpened(item.id) else it.markUnopened(item.id) } }
-        }
+            val failure = try {
+                val api = graph.api() ?: throw NotPairedException()
+                if (read) api.markOpened(item.id) else api.markUnopened(item.id)
+                null
+            } catch (e: ApiException) {
+                e
+            } catch (e: IOException) {
+                // No connection, or not signed in any more (a NotPairedException is one too).
+                e
+            }
+            if (failure == null) return@async Result.success(Unit)
+            graph.library.setOpenedLocally(listOf(item.id), !read, gen)
+            if ((failure as? ApiException)?.status == 404) runCatching { graph.library.refresh() }
+            Result.failure(failure)
+        }.await()
     }
 
     /**
@@ -1536,11 +1553,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * Only a server without the route (405, 404, 403 for the DELETE, or a 2xx with no `done`) is asked one recording at a
      * time, and at most [Organise.MAX_BULK] of them in the whole run (the device's request limit); a server error, 429 or
      * no connection stops the run instead, keeping what was done. Only the ones the server did change here; gone ones
-     * bring a sync.
+     * bring a sync. It runs in the view model's scope: leaving or turning the screen doesn't cut a run short, and what
+     * it did still changes here.
      */
-    suspend fun setOpened(ids: List<String>, opened: Boolean): OpenedRun = withContext(Dispatchers.IO) {
+    suspend fun setOpened(ids: List<String>, opened: Boolean): OpenedRun = viewModelScope.async(Dispatchers.IO) {
         val all = ids.distinct()
-        val api = graph.api() ?: return@withContext OpenedRun(emptySet(), emptySet(), all, NotPairedException())
+        val api = graph.api() ?: return@async OpenedRun(emptySet(), emptySet(), all, NotPairedException())
         val gen = graph.library.generation()
         val done = LinkedHashSet<String>()
         val gone = LinkedHashSet<String>()
@@ -1592,7 +1610,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (oneByOne) graph.library.setOpenedLocally(done, opened, gen)
         if (gone.isNotEmpty()) runCatching { graph.library.refresh() }
         OpenedRun(done, gone, all.filter { it !in done && it !in gone }, failure)
-    }
+    }.await()
 
     /**
      * Looks for missed recordings now (since v1.8; the app opened, at most every 10 minutes and only where something can

@@ -125,16 +125,18 @@
     <string name="v2_lib_mark_unread">نہ پڑھی گئی کریں</string>
     <string name="v2_lib_mark_all_read">سب کو پڑھی ہوئی کریں</string>
     <plurals name="v2_lib_marked_read">
-        <item quantity="one">%d ریکارڈنگ پڑھی ہوئی کر دی گئی</item>
-        <item quantity="other">%d ریکارڈنگز پڑھی ہوئی کر دی گئیں</item>
+        <item quantity="one">%d ریکارڈنگ پڑھی ہوئی نشان زد ہو گئی</item>
+        <item quantity="other">%d ریکارڈنگز پڑھی ہوئی نشان زد ہو گئیں</item>
     </plurals>
     <plurals name="v2_lib_marked_unread">
-        <item quantity="one">%d ریکارڈنگ نہ پڑھی گئی کر دی گئی</item>
-        <item quantity="other">%d ریکارڈنگز نہ پڑھی گئی کر دی گئیں</item>
+        <item quantity="one">%d ریکارڈنگ نہ پڑھی گئی نشان زد ہو گئی</item>
+        <item quantity="other">%d ریکارڈنگز نہ پڑھی گئی نشان زد ہو گئیں</item>
     </plurals>
     <string name="v2_lib_marked_some">%2$d میں سے %1$d ہو گئیں۔ %3$d ابھی منتخب ہیں۔</string>
-    <string name="v2_lib_marked_stopped">رک گیا: %2$d میں سے %1$d ہو گئیں۔ کنکشن دیکھ کر دوبارہ کوشش کریں۔</string>
+    <string name="v2_lib_marked_stopped">رک گیا: %2$d میں سے %1$d ہو گئیں۔ %3$s</string>
     <string name="v2_lib_marked_some_again">%2$d میں سے %1$d ہو گئیں۔ باقی کے لیے دوبارہ کریں۔</string>
-    <string name="v2_lib_marked_read_one">پڑھی ہوئی کر دی گئی</string>
-    <string name="v2_lib_marked_unread_one">نہ پڑھی گئی کر دی گئی</string>
+    <string name="v2_lib_marked_read_one">پڑھی ہوئی نشان زد ہو گئی</string>
+    <string name="v2_lib_marked_unread_one">نہ پڑھی گئی نشان زد ہو گئی</string>
+    <string name="v2_lib_read_needs_newer">پڑھی ہوئی کرنے کے لیے EchoLedger کا نیا سرور چاہیے۔ اسے چلانے والے سے اپ ڈیٹ کرنے کو کہیں۔</string>
+    <string name="v2_lib_unread_needs_newer">نہ پڑھی گئی کرنے کے لیے EchoLedger کا نیا سرور چاہیے۔ اسے چلانے والے سے اپ ڈیٹ کرنے کو کہیں۔</string>
 </resources>

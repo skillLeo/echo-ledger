@@ -450,6 +450,28 @@ class V2LibraryActionsTest : ScreenTest() {
         assertEquals(false, app.graph.library.items.value.first { it.id == "01JA" }.opened)
     }
 
+    /** Review of 2.0.0-y: only what was done leaves the selection; a tick made while it ran stays. */
+    @Test
+    fun aTickMadeWhileMarkingRunsStaysSelected() {
+        seed(listOf(unread("01JA", "Caller 001"), unread("01JB", "Caller 002"), unread("01JC", "Caller 003")))
+        val gate = server.hold()
+        server.on("POST", "/api/sessions/opened") {
+            gate.await(30)
+            doneAll(it)
+        }
+        select("Caller 001")
+        compose.onNodeWithText("Caller 002", substring = true).performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        click("Mark as read")
+        pumpUntil("on its way") { server.requestsTo("POST", "/api/sessions/opened").isNotEmpty() }
+        compose.onNodeWithText("Caller 003", substring = true).performClick()
+        compose.onNodeWithText("3 selected").assertExists()
+        gate.open()
+        said("2 recordings marked as read")
+        compose.onNodeWithText("1 selected").assertExists()
+        assertEquals(listOf("01JA", "01JB"), idsOf(server.requestsTo("POST", "/api/sessions/opened").single()).sorted())
+    }
+
     @Test
     fun unreadsMarkAllAsReadSends450InThreeRequests() {
         seed((1..450).map { unread("01K%03d".format(it), "Caller %03d".format(it)) })

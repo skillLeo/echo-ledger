@@ -110,6 +110,35 @@ class V2RecordingParityTest : ScreenTest() {
     private fun awaitText(words: String) =
         pumpUntil("\"$words\"") { compose.onAllNodesWithText(words, substring = true).fetchSemanticsNodes().isNotEmpty() }
 
+    /**
+     * Review of 2.0.0-y: Mark as unread says "Marked as unread" only once the server took it. An older server's 405
+     * puts the dot back and says it needs a newer server; then a server that takes it says it is marked.
+     */
+    @Test
+    fun markAsUnreadSaysMarkedOnlyOnceTheServerTookIt() {
+        val row = ServerFixtures.libraryItem(ServerFixtures.SESSION_ID, title = "Call with Acme")
+            .replace("\"updated_at\"", "\"opened\":true,\"updated_at\"")
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(row))))
+        runBlocking { app.graph.library.refresh() }
+        val path = "/api/sessions/${ServerFixtures.SESSION_ID}/opened"
+        server.on("DELETE", path, FakeServer.json(405, """{"message":"The DELETE method is not supported.","code":"method_not_allowed"}"""))
+        fun opened() = app.graph.library.items.value.first { it.id == ServerFixtures.SESSION_ID }.opened
+        open(item(important = false).copy(opened = true))
+        awaitText("Hi, thanks for calling.")
+        press("More")
+        press("Mark as unread")
+        awaitText("Mark as unread needs a newer EchoLedger server.")
+        compose.onAllNodesWithText("Marked as unread").assertCountEquals(0)
+        assertEquals("the dot is back", true, opened())
+        compose.mainClock.advanceTimeBy(12_000) // the toast's time runs out
+        server.on("DELETE", path, FakeServer.empty(204))
+        press("More")
+        press("Mark as unread")
+        awaitText("Marked as unread")
+        assertEquals(false, opened())
+        assertEquals(2, server.requestsTo("DELETE", path).size)
+    }
+
     @Test
     fun aFinishedTranscriptSaysFinalTranscriptOverItsLines() {
         open(item(important = false))
