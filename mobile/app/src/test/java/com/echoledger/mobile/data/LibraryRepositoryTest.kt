@@ -602,4 +602,85 @@ class LibraryRepositoryTest : AppTest() {
         repo.setOpenedLocally(listOf("a"), true, gen + 1)
         assertEquals("signed out since: nothing changes", false, repo.items.value.first { it.id == "a" }.opened)
     }
+
+    /**
+     * Follow-up review of 2.0.0-y (1): the newest change to a row shows, and a refused one goes back to what the server
+     * has, only while it is the row's last.
+     */
+    @Test
+    fun `the newest read or unread change shows, and a refused one goes back to what the server has`() = runBlocking {
+        val repo = repository()
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a")))))
+        repo.refresh()
+        val gen = repo.generation()
+        fun a() = repo.items.value.first { it.id == "a" }.opened
+        val onServer = a()
+        assertTrue("the server's isn't unread: $onServer", onServer != false)
+        val older = repo.nextOpenedChange()
+        val newer = repo.nextOpenedChange()
+        repo.setOpenedLocally(listOf("a"), false, gen, newer)
+        repo.setOpenedLocally(listOf("a"), true, gen, older)
+        assertEquals("an older change written late doesn't cover the newer", false, a())
+        repo.undoOpenedLocally("a", older, gen)
+        assertEquals("nor does going back from it", false, a())
+        repo.undoOpenedLocally("a", newer, gen)
+        assertEquals("the last change goes back to what the server has", onServer, a())
+        // The server takes unread; a refused read after it goes back to unread.
+        val taken = repo.nextOpenedChange()
+        repo.setOpenedLocally(listOf("a"), false, gen, taken)
+        repo.confirmOpenedLocally(listOf("a"), false, gen, taken)
+        val refused = repo.nextOpenedChange()
+        repo.setOpenedLocally(listOf("a"), true, gen, refused)
+        repo.undoOpenedLocally("a", refused, gen)
+        assertEquals("back to unread, as the server has it", false, a())
+        repo.markOpenedLocally("a", gen, older)
+        assertEquals("an opening with an older number is dropped", false, a())
+    }
+
+    /**
+     * Review of the follow-ups, round 3 (3): one recording's answer, read outside the library's lock, may be older than
+     * a change the server took since; what the server has stays the change's.
+     */
+    @Test
+    fun `an answer read before a change the server took doesn't count as the server's`() = runBlocking {
+        val repo = repository()
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a")))))
+        repo.refresh()
+        val gen = repo.generation()
+        fun a() = repo.items.value.first { it.id == "a" }.opened
+        val answer = repo.items.value.first { it.id == "a" }.copy(opened = true)
+        val taken = repo.nextOpenedChange()
+        repo.setOpenedLocally(listOf("a"), false, gen, taken)
+        repo.confirmOpenedLocally(listOf("a"), false, gen, taken)
+        // The answer for one recording, read before the change landed, arrives now.
+        repo.upsertLocally(answer, gen)
+        val refused = repo.nextOpenedChange()
+        repo.setOpenedLocally(listOf("a"), true, gen, refused)
+        repo.undoOpenedLocally("a", refused, gen)
+        assertEquals("back to unread, as the server has it", false, a())
+    }
+
+    /**
+     * One recording's answer is read outside the library's lock, so it may be older than a read or unread change made
+     * here: a row changed here keeps its own read or unread from it, and takes the rest. A row never changed here takes
+     * the answer whole.
+     */
+    @Test
+    fun `an answer for one recording keeps the read or unread changed here`() = runBlocking {
+        val repo = repository()
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a"), item("b")))))
+        repo.refresh()
+        val gen = repo.generation()
+        fun row(id: String) = repo.items.value.first { it.id == id }
+        val taken = repo.nextOpenedChange()
+        repo.setOpenedLocally(listOf("a"), false, gen, taken)
+        repo.confirmOpenedLocally(listOf("a"), false, gen, taken)
+        // Read before the change landed: the old read state, and a new title.
+        repo.upsertLocally(row("a").copy(opened = true, title = "Renamed"), gen)
+        assertEquals("the rest of the answer is taken", "Renamed", row("a").title)
+        assertEquals("unread, as changed here", false, row("a").opened)
+        repo.upsertLocally(row("b").copy(opened = false, title = "Other"), gen)
+        assertEquals("never changed here: the answer whole", false, row("b").opened)
+        assertEquals("Other", row("b").title)
+    }
 }

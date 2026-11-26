@@ -263,7 +263,7 @@ fun LibraryScreen(
                                 val done = vm.setOpened(ids, read)
                                 // Only what was done or is gone leaves: a tick changed meanwhile, or one a filter hides, stays.
                                 picked = picked - done.done - done.notFound
-                                vm.showMessage(classicOpenedWords(done, read))
+                                vm.showMessage(classicOpenedWords(context.resources, done, read))
                             }
                         }
                     )
@@ -813,23 +813,9 @@ fun GroupHeader(name: String, count: Int, folded: Boolean, selection: GroupSelec
     }
 }
 
-/** Classic's words for marking many read or unread (contract 2.0.0-y), as v2's openedWords. */
-internal fun classicOpenedWords(run: MainViewModel.OpenedRun, read: Boolean): String {
-    val what = if (read) "read" else "unread"
-    val marked = run.done.size
-    val failure = run.failure
-    return when {
-        run.left.isEmpty() -> if (marked == 1) "1 recording marked as $what" else "$marked recordings marked as $what"
-        failure != null && marked == 0 -> classicOpenedProblem(failure, read)
-        failure != null -> "Stopped: $marked of ${run.total} marked as $what. ${classicOpenedProblem(failure, read)}"
-        else -> "$marked of ${run.total} marked as $what. ${run.left.size} still selected."
-    }
-}
-
-/** As v2's openedProblem: the connection only when there was none, a 405 as needing a newer server, else the server's words. */
-internal fun classicOpenedProblem(failure: Throwable, read: Boolean): String =
-    if ((failure as? com.echoledger.mobile.net.ApiException)?.status == 405) {
-        "Mark as ${if (read) "read" else "unread"} needs a newer EchoLedger server. Ask the person who runs it to update."
-    } else {
-        com.echoledger.mobile.core.Problems.text(failure, "The change could not be saved.")
-    }
+/**
+ * Classic's words for marking many read or unread (contract 2.0.0-y): v2's, from the same strings, so they are in the
+ * app's language (Urdu too) and say the same on both designs.
+ */
+internal fun classicOpenedWords(res: android.content.res.Resources, run: MainViewModel.OpenedRun, read: Boolean): String =
+    com.echoledger.mobile.ui.v2.library.openedWords(res, run, read)
