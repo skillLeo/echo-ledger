@@ -44,7 +44,7 @@ export const PAIRS = [
       await page.getByRole("region", { name: "Live Assist" }).scrollIntoViewIfNeeded();
     })],
     [v2("library"), steps(async (page) => {
-      await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Live", exact: true }).click();
+      await page.locator('nav[data-nav="main"]').getByRole("button", { name: "Live", exact: true }).click();
       await page.waitForTimeout(1500);
     })]],
   ["selection", "Library selection: classic's bulk bar with More open | the new design's bar (× · count · Select all · Move, Label, Share, Delete · ⋮) with ⋮ › Export ▸ open",

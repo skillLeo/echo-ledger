@@ -57,7 +57,7 @@ try {
       opened.setDefaultTimeout(120_000);
       await extraAnswers(opened, noLists);
       await opened.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${FLAGS},v21_urdu${where}&applang=ur${extra}`);
-      await opened.getByRole("navigation", { name: "Main" }).waitFor();
+      await opened.locator('nav[data-nav="main"]').waitFor();
       await opened.waitForFunction(() => document.documentElement.dir === "rtl", null, { timeout: 30_000 }).catch(() => undefined);
       await opened.waitForTimeout(1000);
       return opened;

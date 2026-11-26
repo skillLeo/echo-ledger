@@ -20,6 +20,9 @@ export const CONVERTED: readonly string[] = [
   // and what the new design opens with them: the share sheet (the recording page's Share) and a project's filing rules.
   "views/main/ShareDialog.tsx",
   "v2/workspace/Rules.tsx",
+  // D-259: the All projects page (its cards, the tree, the name dialog) and the app's two message regions' names.
+  "v2/workspace/ProjectsListV2.tsx",
+  "v2/shell/AppToast.tsx",
   // D3a: Settings' pages, their rows and frame, the home with the account card, in the new look (the groups' words are
   // translated where they are shown: groups.ts keeps them as English ids; the registry's words are D3b's).
   "v2/settings/AccountCard.tsx",
@@ -79,4 +82,19 @@ export const CONVERTED: readonly string[] = [
   "lib/explainer.ts",
   "lib/privacy.ts",
   "lib/zoom.ts",
+  // D-248: the system's right-click menus on a Mac (their words are the registry's and the callers', through t(); the
+  // registry, the menu bar and contextMenus.ts keep only key names and the checks' own messages besides).
+  "v2/actions/popup.ts",
+  // D-253, D-255: the shell. Record's split button, the rail and its panels' head and the Projects panel, the rail's
+  // frame (NavShell: "Main" is said too; the scripts find it by data-nav), the sidebar shell, the status line, the zoom
+  // chip, Windows' own caption buttons and the other places' panels. TitleRow.tsx keeps its search words' English as
+  // keys (said through t()).
+  "v2/shell/RecordSplit.tsx",
+  "v2/shell/NavRail.tsx",
+  "v2/shell/NavShell.tsx",
+  "v2/shell/Shell.tsx",
+  "v2/shell/status.ts",
+  "v2/shell/Zoom.tsx",
+  "v2/shell/WindowButtons.tsx",
+  "v2/shell/PlacePanels.tsx",
 ];

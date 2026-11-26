@@ -19,6 +19,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const RLM = "\u200F";
 const NBSP = "\u00A0";
 const urdu = () => act(() => setLanguage("ur", { root: false }));
+/** An hour's time in Urdu as every engine now writes it (lib/format clockTime), its space one that doesn't break. */
+const URDU_TIME: Record<number, string> = { 9: `صبح${NBSP}9:00`, 14: `دوپہر${NBSP}2:00` };
 /** "Imran کی بھیجی ہوئی ریکارڈنگ" as t() writes it in Urdu: the name in its isolate first. */
 const SENT_BY = `${FSI}Imran${PDI} کی بھیجی ہوئی ریکارڈنگ`;
 
@@ -98,7 +100,7 @@ describe("formatWhen: a date and its time", () => {
   it("Urdu: one right-to-left run of two isolated parts, the time kept whole", async () => {
     resetLanguageForTests({ Today: "آج", Yesterday: "کل" });
     await urdu();
-    const time = (h: number) => new Date(2026, 10, 25, h).toLocaleTimeString("ur-PK", { hour: "numeric", minute: "2-digit", hour12: true }).replace(/\s/g, NBSP);
+    const time = (h: number) => URDU_TIME[h];
     expect(formatWhen(at(25, 14), now)).toBe(`${RLI}${FSI}آج${PDI} · ${FSI}${time(14)}${PDI}${PDI}`);
     expect(formatWhen(at(24, 9), now)).toBe(`${RLI}${FSI}کل${PDI} · ${FSI}${time(9)}${PDI}${PDI}`);
     const date = new Date(2026, 10, 23).toLocaleDateString("ur-PK", { month: "short", day: "numeric" });
@@ -147,7 +149,7 @@ describe("whenParts: one part of a date where a place shows only one, in Urdu ne
   it("Urdu: Activity's today shows its time and an older one its day, each in a closed isolate", async () => {
     resetLanguageForTests({ Today: "آج", Yesterday: "کل" });
     await urdu();
-    const time = (h: number) => new Date(2026, 10, 25, h).toLocaleTimeString("ur-PK", { hour: "numeric", minute: "2-digit", hour12: true }).replace(/\s/g, NBSP);
+    const time = (h: number) => URDU_TIME[h];
     const date = new Date(2026, 10, 23).toLocaleDateString("ur-PK", { month: "short", day: "numeric" });
     expect(shortWhen(at(25, 14))).toBe(`${FSI}${time(14)}${PDI}`);
     expect(shortWhen(at(23, 14))).toBe(`${FSI}${date}${PDI}`);

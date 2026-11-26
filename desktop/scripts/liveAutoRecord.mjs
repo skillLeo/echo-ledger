@@ -39,7 +39,7 @@ try {
     page.setDefaultTimeout(120_000);
     const where = c.platform === "windows" ? "&platform=windows" : "&platform=macos&lights=1";
     await page.goto(`${base}scripts/screens/index.html?screen=library&theme=${c.theme}&uiflags=${FLAGS}${where}${c.lang === "ur" ? "&lang=ur" : ""}${c.setup ? "&older=1" : ""}`);
-    const rail = page.getByRole("navigation", { name: "Main" });
+    const rail = page.locator('nav[data-nav="main"]');
     await rail.waitFor();
     await page.waitForTimeout(1000);
     await rail.getByRole("button", { name: /^Live/ }).first().click();

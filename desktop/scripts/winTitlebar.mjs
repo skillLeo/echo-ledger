@@ -30,7 +30,7 @@ const open = async ({ width, lang = "en", theme = "light", on = true }) => {
   const page = await browser.newPage({ viewport: { width, height: HEIGHT }, colorScheme: theme, reducedMotion: "reduce" });
   page.setDefaultTimeout(120_000);
   await page.goto(`${base}scripts/screens/index.html?screen=library&theme=${theme}&uiflags=${V2_FLAGS}&platform=windows${on ? "&wintitle=1" : ""}${lang === "ur" ? "&lang=ur" : ""}`);
-  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Library", exact: true }).click();
+  await page.locator('nav[data-nav="main"]').getByRole("button", { name: "Library", exact: true }).click();
   await page.locator("button[data-row-id]").first().waitFor();
   if (width < 1100 && await page.getByTestId("nav-panel").count()) await page.keyboard.press("Escape");
   await page.mouse.move(width / 2, HEIGHT / 2);

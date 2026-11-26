@@ -1,6 +1,7 @@
 // The panels of the places other than the Library and Projects (PLAN_NAV_3_LEVELS §3): Live's parts, Ask's new
 // question and its projects, Activity's All · Needs you · Done, and Settings' groups with a search. Each opens its
-// page; the panel is only where the place's views are chosen (never the same thing at two levels).
+// page; the panel is only where the place's views are chosen (never the same thing at two levels). Every word is the
+// window's language (D-3, D-255); a project's name is its own.
 import { useState, type ReactNode } from "react";
 import { Icon, Icons, SearchField } from "../components";
 import type { IconType } from "../components/Button";
@@ -37,13 +38,13 @@ export function LivePanel({ callRecording, onCalls, onPart, current }: {
   return (
     <>
       <Group>
-        <Row icon={Icons.PhoneIcon} label="Call recording" end={callRecording ? "On" : "Off"} onClick={onCalls} />
+        <Row icon={Icons.PhoneIcon} label={t("Call recording")} end={callRecording ? t("On") : t("Off")} onClick={onCalls} />
       </Group>
-      <Group title="During a call">
-        <Row icon={Icons.SparkleIcon} label="Live Assist" current={current === "assist"} onClick={() => onPart("assist")} />
-        <Row icon={Icons.LanguagesIcon} label="Live Translate" current={current === "translate"} onClick={() => onPart("translate")} />
-        <Row icon={Icons.MicIcon} label="Dictation" current={current === "dictation"} onClick={() => onPart("dictation")} />
-        <Row icon={Icons.CaptionsIcon} label="Captions" current={current === "captions"} onClick={() => onPart("captions")} />
+      <Group title={t("During a call")}>
+        <Row icon={Icons.SparkleIcon} label={t("Live Assist")} current={current === "assist"} onClick={() => onPart("assist")} />
+        <Row icon={Icons.LanguagesIcon} label={t("Live Translate")} current={current === "translate"} onClick={() => onPart("translate")} />
+        <Row icon={Icons.MicIcon} label={t("Dictation")} current={current === "dictation"} onClick={() => onPart("dictation")} />
+        <Row icon={Icons.CaptionsIcon} label={t("Captions")} current={current === "captions"} onClick={() => onPart("captions")} />
       </Group>
     </>
   );
@@ -57,11 +58,11 @@ export function AskPanel({ projects, current, onAsk }: { projects: readonly { id
   return (
     <>
       <Group>
-        <Row icon={Icons.PlusIcon} label="New question" current={current === null} onClick={() => onAsk(null)} />
+        <Row icon={Icons.PlusIcon} label={t("New question")} current={current === null} onClick={() => onAsk(null)} />
       </Group>
       {projects.length > 0 && (
-        <Group title="About a project">
-          {projects.length > 10 && <li><SearchField label="Search projects" value={find} onChange={setFind} className="el-panel__search" /></li>}
+        <Group title={t("About a project")}>
+          {projects.length > 10 && <li><SearchField label={t("Search projects")} value={find} onChange={setFind} className="el-panel__search" /></li>}
           {shown.map((p) => <Row key={p.id} icon={Icons.FolderIcon} label={p.name} current={current === p.id} onClick={() => onAsk(p.id)} />)}
         </Group>
       )}
@@ -73,10 +74,10 @@ export type ActivityShow = "all" | "needs" | "done";
 /** Activity: everything, what needs the person, what is done. */
 export function ActivityPanel({ show, needs, onShow }: { show: ActivityShow; needs: number; onShow: (show: ActivityShow) => void }) {
   return (
-    <Group title="Activity">
-      <Row icon={Icons.BellIcon} label="All" current={show === "all"} onClick={() => onShow("all")} />
-      <Row icon={Icons.ErrorIcon} label="Needs you" current={show === "needs"} onClick={() => onShow("needs")} end={needs || null} strong />
-      <Row icon={Icons.CheckIcon} label="Done" current={show === "done"} onClick={() => onShow("done")} />
+    <Group title={t("Activity")}>
+      <Row icon={Icons.BellIcon} label={t("All")} current={show === "all"} onClick={() => onShow("all")} />
+      <Row icon={Icons.ErrorIcon} label={t("Needs you")} current={show === "needs"} onClick={() => onShow("needs")} end={needs || null} strong />
+      <Row icon={Icons.CheckIcon} label={t("Done")} current={show === "done"} onClick={() => onShow("done")} />
     </Group>
   );
 }

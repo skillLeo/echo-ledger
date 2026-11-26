@@ -1,7 +1,8 @@
 // The v2 app shell (ui_v2.shell), laid out as PLAN_V2_PARITY 2 decides for the desktop: "● Record" at the top, then
 // Library, Projects, Live and Ask; at the foot Activity (with how many need you), Settings, the account and the status
 // line. Record opens the page where recording starts (today's Home and its Live Assist card). Modules not rebuilt yet
-// show today's page inside the new frame; Live and Ask, without their page yet, say where to find them meanwhile.
+// show today's page inside the new frame; Live and Ask, without their page yet, say where to find them meanwhile. Every
+// word is the window's language (D-253, D-255); keys and the app's name stay as they are.
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Avatar, Badge, Button, EmptyState, Icon, Icons, NavItem, Sidebar, Status } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
@@ -11,9 +12,11 @@ import { isConfirmOpen } from "../../lib/confirm";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 import { clampSidebar, SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN } from "../../lib/shell";
 import { NavShell } from "./NavShell";
-import { NoProjectDrop, ProjectsPanel, type Place } from "./NavRail";
+import { NoProjectDrop, ProjectsPanel, spokenParts, type Place } from "./NavRail";
 import { setProjectsAccount } from "./kept";
 import { keyboardPoint, useProjectMenu } from "./ProjectMenu";
+import { t } from "../../i18n";
+import { ariaKeys } from "../actions/registry";
 
 /** How long Record ignores presses when the status never changes (the core said no, or was slow to say). */
 const PRESS_HOLD_MS = 3000;
@@ -25,10 +28,14 @@ const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
     || !!target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'));
 
+/** The app's name at the top of the sidebar, as it is in every language. */
+const BRAND = "EchoLedger";
+
 /** Search's keys in the sidebar tooltip: ⌘F on a Mac, Ctrl+F on Windows (⌘K / Ctrl+K open it too). */
 export function searchHint(paletteKeys?: string): { title: string; keys: string } {
   const mac = paletteKeys?.startsWith("⌘") ?? false;
-  return { title: `Search · ${mac ? "⌘F" : "Ctrl+F"}`, keys: mac ? "Meta+F Meta+K" : "Control+F Control+K" };
+  const find = mac ? "⌘F" : "Ctrl+F";
+  return { title: t("Search · :keys", { keys: find }), keys: [ariaKeys(find), ariaKeys(mac ? "⌘K" : "Ctrl+K")].join(" ") };
 }
 
 export type Module = "record" | "library" | "projects" | "live" | "ask" | "activity" | "settings";
@@ -174,14 +181,14 @@ export type ShellWorkspace = {
 
 function WorkspaceMenu({ workspace: w }: { workspace: ShellWorkspace }) {
   const items: MenuItem[] = [
-    ...w.others.map((o) => ({ label: o.role ? `${o.name} · ${o.role}` : o.name, group: "Your other workspaces", disabled: true })),
-    ...(w.invite ? [{ label: w.invite.locked ? `Invite people (${w.invite.locked})` : "Invite people", icon: Icons.UsersIcon, group: `This computer works in ${w.name}`, onPick: w.invite.onPick }] : []),
-    { label: "Switch or manage in the browser", icon: Icons.WebIcon, group: `This computer works in ${w.name}`, onPick: w.onManage },
+    ...w.others.map((o) => ({ label: o.role ? `${o.name} · ${o.role}` : o.name, group: t("Your other workspaces"), disabled: true })),
+    ...(w.invite ? [{ label: w.invite.locked ? t("Invite people (:locked)", { locked: w.invite.locked }) : t("Invite people"), icon: Icons.UsersIcon, group: t("This computer works in :name", { name: w.name }), onPick: w.invite.onPick }] : []),
+    { label: t("Switch or manage in the browser"), icon: Icons.WebIcon, group: t("This computer works in :name", { name: w.name }), onPick: w.onManage },
   ];
   return (
     <div className="el-shell__workspace">
-      <Menu label={`Workspace: ${w.name}${w.role ? `, ${w.role}` : ""}`} items={items}
-        button={{ variant: "quiet", icon: Icons.UsersIcon, iconEnd: Icons.ChevronDownIcon, text: w.role ? `${w.name} · ${w.role}` : w.name, title: "Workspace" }} />
+      <Menu label={w.role ? t("Workspace: :name, :role", { name: w.name, role: w.role }) : t("Workspace: :name", { name: w.name })} items={items}
+        button={{ variant: "quiet", icon: Icons.UsersIcon, iconEnd: Icons.ChevronDownIcon, text: w.role ? `${w.name} · ${w.role}` : w.name, title: t("Workspace") }} />
     </div>
   );
 }
@@ -241,8 +248,8 @@ function ResizeEdge({ width, onWidth }: { width: number; onWidth: (width: number
     e.preventDefault();
   };
   return (
-    <div className="el-shell__edge" role="separator" aria-orientation="vertical" aria-label="Resize the sidebar" tabIndex={0}
-      aria-valuemin={SIDEBAR_MIN} aria-valuemax={SIDEBAR_MAX} aria-valuenow={width} title="Drag to resize. Double-click for the usual width."
+    <div className="el-shell__edge" role="separator" aria-orientation="vertical" aria-label={t("Resize the sidebar")} tabIndex={0}
+      aria-valuemin={SIDEBAR_MIN} aria-valuemax={SIDEBAR_MAX} aria-valuenow={width} title={t("Drag to resize. Double-click for the usual width.")}
       onPointerDown={start} onDoubleClick={() => onWidth(SIDEBAR_DEFAULT, true)} onKeyDown={key} />
   );
 }
@@ -293,7 +300,7 @@ function useFolds(): [ReadonlySet<string>, (id: string) => void] {
  * The projects as a tree: pinned first, then by name (or the list's own order at its top level), each project's
  * subfolders under it (foldable, remembered).
  */
-function ProjectTreeNav({ projects, current, onOpen, menus = true, label = "Projects", order }: {
+function ProjectTreeNav({ projects, current, onOpen, menus = true, label, order }: {
   projects: readonly SidebarProject[]; current: string | null; onOpen: (id: string) => void;
   /** Each project's menu (right-click, Shift+F10, the menu key); off where the tree only takes dropped recordings. */
   menus?: boolean;
@@ -312,7 +319,7 @@ function ProjectTreeNav({ projects, current, onOpen, menus = true, label = "Proj
     const rows = children(parent);
     if (!rows.length) return null;
     return (
-      <ul className="el-nav-sub el-nav-tree" aria-label={parent === null ? label : undefined}>
+      <ul className="el-nav-sub el-nav-tree" aria-label={parent === null ? label ?? t("Projects") : undefined}>
         {rows.map((p) => {
           const kids = children(p.id).length > 0;
           const open = kids && !folds.has(p.id);
@@ -320,7 +327,7 @@ function ProjectTreeNav({ projects, current, onOpen, menus = true, label = "Proj
             <li key={p.id} className="el-nav-tree__item" style={{ ["--el-tree-depth" as string]: String(depth) }}>
               <div className="el-nav-tree__row" {...{ [DROP_ATTRIBUTE]: p.id }}>
                 {kids ? (
-                  <button type="button" className="el-nav-tree__fold" aria-expanded={open} aria-label={`${open ? "Fold" : "Show"} ${p.name}'s folders`} onClick={() => fold(p.id)}>
+                  <button type="button" className="el-nav-tree__fold" aria-expanded={open} aria-label={open ? t("Fold :name's folders", { name: p.name }) : t("Show :name's folders", { name: p.name })} onClick={() => fold(p.id)}>
                     <Icon icon={open ? Icons.ChevronDownIcon : Icons.ChevronEndIcon} directional />
                   </button>
                 ) : <span className="el-nav-tree__fold" aria-hidden="true" />}
@@ -387,7 +394,7 @@ function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity
   // their project) and every project. Hidden otherwise; Move to project… is the way for the keyboard.
   const drops = (
     <div className="el-panel-drops" aria-hidden="true">
-      <p className="el-caption el-secondary el-panel-drops__title">Drop on a project</p>
+      <p className="el-caption el-secondary el-panel-drops__title">{t("Drop on a project")}</p>
       <NoProjectDrop />
       {onProject && projectTree && projectTree.length > 0 && <ProjectTreeNav projects={projectTree} current={null} onOpen={() => undefined} menus={false} />}
     </div>
@@ -404,14 +411,14 @@ function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity
   return (
     <NavShell place={place} onPlace={onPlace} onHome={() => { setOwn(null); onGo("record"); }} status={status} panelFlyout={nav?.panelFlyout} layoutFor={nav?.layoutFor} titleEnd={nav?.titleEnd}
       panels={{ library: library && <>{library}{drops}</>, projects: projectsPanel || undefined, ...nav?.panels }} feet={{ library: footStart, ...nav?.feet }}
-      libraryCount={nav?.libraryCount} activityCount={activity} activityTone={activityTone} liveDot={nav?.liveDot ?? !!recording} liveDotWords={nav?.liveDotWords ?? (recording ? "recording" : undefined)}
+      libraryCount={nav?.libraryCount} activityCount={activity} activityTone={activityTone} liveDot={nav?.liveDot ?? !!recording} liveDotWords={nav?.liveDotWords ?? (recording ? t("shell_context.live_recording") : undefined)}
       setupAttention={nav?.setupAttention ?? status.kind === "setup"} onSetupHealth={onSetup ?? (() => onGo("settings"))} onHelp={onHelp}
       recording={recording} onRecord={onRecord} onUpload={onUpload} onVoiceNote={onVoiceNote} callRecording={nav?.callRecording}
       onSearch={onSearch} searchKeys={searchKeys} me={me} account={nav?.account} uploading={uploading} notices={notices} banners={banners}>
       {own === "live" && live ? <section className="content page-live">{live}</section>
         : own === "ask" && ask ? <section className="content page-ask">{ask}</section>
-          : own ? <EmptyState icon={own === "live" ? Icons.RecordIcon : Icons.AskIcon} title={own === "live" ? "Live is on its way" : "Ask is on its way"}
-            body="Its place is here soon." /> : children}
+          : own ? <EmptyState icon={own === "live" ? Icons.RecordIcon : Icons.AskIcon} title={own === "live" ? t("Live is on its way") : t("Ask is on its way")}
+            body={t("Its place is here soon.")} /> : children}
     </NavShell>
   );
 }
@@ -450,7 +457,9 @@ function ShellSidebar({ tab, onGo, status, me, live, ask, notices, banners, acti
     return () => window.removeEventListener("keydown", onKey);
   }, []);
   const hint = searchHint(searchKeys);
-  const search = onSearch && <Button size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label="Search" title={hint.title} aria-keyshortcuts={hint.keys} onClick={() => onSearch()} />;
+  // The sidebar's own key, "[", a value of its line (left to right in every language).
+  const railTitle = rail ? t("Expand the sidebar (:keys)", { keys: "[" }) : t("Collapse the sidebar (:keys)", { keys: "[" });
+  const search = onSearch && <Button size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label={t("Search")} title={hint.title} aria-keyshortcuts={hint.keys} onClick={() => onSearch()} />;
   // Live and Ask live in the shell only until their modules are built.
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
   // With the Library's sections, a short window keeps more of the middle: the foot's rows pack tighter (Activity and
@@ -525,30 +534,30 @@ function ShellSidebar({ tab, onGo, status, me, live, ask, notices, banners, acti
   return (
     <div className={`el-root el-shell${library ? " el-shell--library" : ""}${library && short && !rail ? " el-shell--short" : ""}`} data-shell="v2" style={width !== undefined && !rail ? { ["--el-sidebar-width" as string]: `${width}px` } : undefined}>
       {/* The name, and Search at its end (the start in RTL); in the rail Search stays at the top, the name goes. */}
-      <Sidebar label="Main" brand={<>EchoLedger</>} brandEnd={search} rail={rail}
+      <Sidebar label={t("Main")} nav="main" brand={<>{BRAND}</>} brandEnd={search} rail={rail}
         footer={
           <div className="el-shell__foot">
             {footStart && <div className="el-shell__foot-start">{footStart}</div>}
             {/* Activity, Settings and the tools: one row of icons in a short window (el-shell--short). */}
             <div className="el-shell__actions">
-            {item("activity", "Activity", Icons.BellIcon, activity ? activity : undefined)}
-            {item("settings", "Settings", Icons.SettingsIcon)}
+            {item("activity", t("Activity"), Icons.BellIcon, activity ? activity : undefined)}
+            {item("settings", t("Settings"), Icons.SettingsIcon)}
             {library ? (
               // With the Library's sections the foot stays on screen: its least-used buttons share one row, as icons.
               <div className="el-shell__tools">
-                {onHelp && <Button size="sm" variant="quiet" icon={Icons.HelpIcon} aria-label="Help & shortcuts" title="Help & shortcuts" onClick={onHelp} />}
-                {onAdmin && <Button size="sm" variant="quiet" icon={Icons.LinkIcon} aria-label="Admin panel" title="Admin panel" onClick={onAdmin} />}
-                {onRail && <Button size="sm" variant="quiet" icon={Icons.SidebarIcon} aria-label={rail ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!rail}
-                  aria-keyshortcuts="[" title={rail ? "Expand the sidebar ([)" : "Collapse the sidebar ([)"} onClick={onRail} />}
+                {onHelp && <Button size="sm" variant="quiet" icon={Icons.HelpIcon} aria-label={t("Help & shortcuts")} title={t("Help & shortcuts")} onClick={onHelp} />}
+                {onAdmin && <Button size="sm" variant="quiet" icon={Icons.LinkIcon} aria-label={t("Admin panel")} title={t("Admin panel")} onClick={onAdmin} />}
+                {onRail && <Button size="sm" variant="quiet" icon={Icons.SidebarIcon} aria-label={rail ? t("Expand sidebar") : t("Collapse sidebar")} aria-expanded={!rail}
+                  aria-keyshortcuts="[" title={railTitle} onClick={onRail} />}
               </div>
             ) : (
               <>
-                {onHelp && <NavItem icon={Icons.HelpIcon} label="Help & shortcuts" onClick={onHelp} />}
-                {onAdmin && <NavItem icon={Icons.LinkIcon} label="Admin panel" onClick={onAdmin} />}
+                {onHelp && <NavItem icon={Icons.HelpIcon} label={t("Help & shortcuts")} onClick={onHelp} />}
+                {onAdmin && <NavItem icon={Icons.LinkIcon} label={t("Admin panel")} onClick={onAdmin} />}
                 {onRail && (
-                  <button type="button" className="el-nav-item" aria-expanded={!rail} aria-keyshortcuts="[" title={rail ? "Expand the sidebar ([)" : "Collapse the sidebar ([)"} onClick={onRail}>
+                  <button type="button" className="el-nav-item" aria-expanded={!rail} aria-keyshortcuts="[" title={railTitle} onClick={onRail}>
                     <Icon icon={Icons.SidebarIcon} size="md" />
-                    <span className="el-nav-item__label">{rail ? "Expand sidebar" : "Collapse sidebar"}</span>
+                    <span className="el-nav-item__label">{rail ? t("Expand sidebar") : t("Collapse sidebar")}</span>
                   </button>
                 )}
               </>
@@ -564,7 +573,7 @@ function ShellSidebar({ tab, onGo, status, me, live, ask, notices, banners, acti
                   <span className="el-shell__me-name">{me.name}</span>
                   {me.plan && <Badge>{me.plan}</Badge>}
                 </span>
-                <span className="el-visually-hidden" id="el-shell-me-hint">Opens Settings</span>
+                <span className="el-visually-hidden" id="el-shell-me-hint">{t("Opens Settings")}</span>
               </button>
             )}
             </div>
@@ -580,51 +589,51 @@ function ShellSidebar({ tab, onGo, status, me, live, ask, notices, banners, acti
                   {/* Only Recording / Paused and what is said aloud when it changes; the time ticks outside the live region. */}
                   <Status kind={status.kind} live>{status.text}</Status>
                   {status.time && <span className="el-shell__time el-num" dir="ltr">{` · ${status.time}`}</span>}
-                  <span className="el-visually-hidden" id="el-shell-chip-hint">Opens the Record page</span>
+                  <span className="el-visually-hidden" id="el-shell-chip-hint">{t("Opens the Record page")}</span>
                 </button>
               ) : status.kind === "setup" && onSetup ? (
                 <button type="button" className="el-shell__status-fix" onClick={onSetup} aria-describedby="el-shell-setup-hint">
                   <Status kind={status.kind} live>{status.text}</Status>
-                  <span className="el-visually-hidden" id="el-shell-setup-hint">Opens Setup & health</span>
+                  <span className="el-visually-hidden" id="el-shell-setup-hint">{t("Opens Setup & health")}</span>
                 </button>
               ) : <Status kind={status.kind} live>{status.text}</Status>}
             </div>
           </div>
         }>
         {/* ● Record: one press records (or stops); its menu has a voice note and the Record page (calls ready, Live
-            Assist), the sheet the phone opens on a long press. */}
-        <div className="el-shell__record" role="group" aria-label="Record" aria-current={current === "record" ? "page" : undefined}>
+            Assist), the sheet the phone opens on a long press. Its words are the window's language (D-253). */}
+        <div className="el-shell__record" role="group" aria-label={t("Record")} aria-current={current === "record" ? "page" : undefined}>
           <Button variant={stops ? "danger" : "primary"} icon={stops ? Icons.StopIcon : Icons.RecordIcon} aria-disabled={pressing ? true : undefined}
-            onKeyDown={(e) => { if (e.repeat) e.preventDefault(); }} onClick={pressRecord}>{stops ? "Stop recording" : "Record"}</Button>
-          <Menu label="More ways to record" button={{ variant: stops ? "danger" : "primary", icon: Icons.ChevronDownIcon }} items={[
-            ...(onRecord ? [{ label: stops ? "Stop recording" : "Record now", icon: stops ? Icons.StopIcon : Icons.RecordIcon, onPick: pressRecord }] : []),
+            onKeyDown={(e) => { if (e.repeat) e.preventDefault(); }} onClick={pressRecord}>{stops ? t("Stop recording") : t("Record")}</Button>
+          <Menu label={t("More ways to record")} button={{ variant: stops ? "danger" : "primary", icon: Icons.ChevronDownIcon }} items={[
+            ...(onRecord ? [{ label: stops ? t("Stop recording") : t("Record now"), icon: stops ? Icons.StopIcon : Icons.RecordIcon, onPick: pressRecord }] : []),
             // Import: files can also be dropped anywhere on the window.
-            ...(onUpload ? [{ label: "Import audio files…", icon: Icons.ShareIcon, onPick: onUpload }] : []),
-            ...(onVoiceNote ? [{ label: "Voice note", icon: Icons.MicIcon, onPick: onVoiceNote }] : []),
-            ...(onNewProject ? [{ label: "New project…", icon: Icons.FolderIcon, group: "Make", onPick: onNewProject }] : []),
-            ...(onRequestLink ? [{ label: "Request link…", icon: Icons.LinkIcon, group: "Make", onPick: onRequestLink }] : []),
-            { label: "Record page", icon: Icons.HomeIcon, onPick: () => go("record") },
+            ...(onUpload ? [{ label: t("Import audio files…"), icon: Icons.ShareIcon, onPick: onUpload }] : []),
+            ...(onVoiceNote ? [{ label: t("Voice note"), icon: Icons.MicIcon, onPick: onVoiceNote }] : []),
+            ...(onNewProject ? [{ label: t("New project…"), icon: Icons.FolderIcon, group: t("Make"), onPick: onNewProject }] : []),
+            ...(onRequestLink ? [{ label: t("Request link…"), icon: Icons.LinkIcon, group: t("Make"), onPick: onRequestLink }] : []),
+            { label: t("Record page"), icon: Icons.HomeIcon, onPick: () => go("record") },
           ]} />
         </div>
         {/* With the Library's sections (PLAN_LIBRARY_FILTERS), Live and Ask stay at the top with Record, the foot stays put, and
             only the middle scrolls: LIBRARY, MY VIEWS, LABELS and PROJECTS. */}
-        {library && item("live", "Live", Icons.WaveIcon)}
-        {library && item("ask", "Ask", Icons.AskIcon)}
+        {library && item("live", t("Live"), Icons.WaveIcon)}
+        {library && item("ask", t("Ask"), Icons.AskIcon)}
         <div ref={middle} className={library ? "el-sidebar__middle" : "el-sidebar__flow"}
           data-more-above={library && edges.above ? "" : undefined} data-more-below={library && edges.below ? "" : undefined}>
         {library ? (
           <>
             <div className="el-shell__rail-only">
-              <NavItem icon={Icons.LibraryIcon} label="Library" current={current === "library"} onClick={() => go("library")} count={libraryAttention ? 1 : undefined} />
+              <NavItem icon={Icons.LibraryIcon} label={t("Library")} current={current === "library"} onClick={() => go("library")} count={libraryAttention ? 1 : undefined} />
             </div>
             <div className="el-shell__full-only" onClickCapture={() => setOwn(null)}>{library}</div>
           </>
-        ) : item("library", "Library", Icons.LibraryIcon)}
+        ) : item("library", t("Library"), Icons.LibraryIcon)}
         {!library && places && places.places.length > 0 && (
-          <ul className="el-nav-sub" aria-label="Library places">
+          <ul className="el-nav-sub" aria-label={t("Library places")}>
             {places.places.map((p) => (
               <li key={p.key} {...(p.drop ? { [DROP_ATTRIBUTE]: "" } : {})}>
-                <button type="button" className="el-nav-item el-nav-item--sub el-nav-item--place" aria-label={`${p.label}, ${p.count}`}
+                <button type="button" className="el-nav-item el-nav-item--sub el-nav-item--place" aria-label={spokenParts([p.label, String(p.count)])}
                   aria-current={current === "library" && places.current === p.key ? "page" : undefined}
                   onClick={() => { setOwn(null); places.open(p.key); }}>
                   <span className="el-nav-item__label" dir="auto">{p.label}</span>
@@ -635,35 +644,35 @@ function ShellSidebar({ tab, onGo, status, me, live, ask, notices, banners, acti
           </ul>
         )}
         {!library && shared && shared.tabs.length > 0 && (
-          <ul className="el-nav-sub" aria-label="Shared">
+          <ul className="el-nav-sub" aria-label={t("Shared")}>
             {shared.tabs.map(([tab, label]) => (
               <li key={tab}><button type="button" className="el-nav-item el-nav-item--sub" aria-current={shared.current === tab ? "page" : undefined}
-                onClick={() => { setOwn(null); shared.open(tab); }}>{label === "With me" ? "Shared with me" : label}</button></li>
+                onClick={() => { setOwn(null); shared.open(tab); }}>{label === "With me" ? t("Shared with me") : t(label)}</button></li>
             ))}
           </ul>
         )}
         {library ? (
           <>
-            <div className="el-shell__rail-only">{item("projects", "Projects", Icons.FolderIcon)}</div>
+            <div className="el-shell__rail-only">{item("projects", t("Projects"), Icons.FolderIcon)}</div>
             <div className="el-nav-section__head el-shell__full-only">
-              <button type="button" className="el-nav-section__fold" aria-expanded={!projectsFolded} aria-label={projectsFolded ? "Show projects" : "Fold projects"}
+              <button type="button" className="el-nav-section__fold" aria-expanded={!projectsFolded} aria-label={projectsFolded ? t("Show projects") : t("Fold projects")}
                 onClick={foldProjects}><Icon icon={projectsFolded ? Icons.ChevronEndIcon : Icons.ChevronDownIcon} directional /></button>
               <button type="button" className="el-nav-section__link el-caption" aria-current={current === "projects" && !projectId ? "page" : undefined}
-                onClick={() => go("projects")}>Projects</button>
-              {onNewProject && <Button size="sm" variant="quiet" icon={Icons.PlusIcon} aria-label="New project" title="New project" onClick={onNewProject} />}
+                onClick={() => go("projects")}>{t("Projects")}</button>
+              {onNewProject && <Button size="sm" variant="quiet" icon={Icons.PlusIcon} aria-label={t("New project")} title={t("New project")} onClick={onNewProject} />}
             </div>
           </>
-        ) : item("projects", "Projects", Icons.FolderIcon)}
+        ) : item("projects", t("Projects"), Icons.FolderIcon)}
         {/* While recordings are dragged (lib/dragMove.ts): the Inbox takes them out of their project. Pinned projects
             below take them too. Hidden otherwise; Move to project… is the way for the keyboard. */}
         {!places?.places.some((p) => p.drop) && <div className="el-nav-drop" aria-hidden="true" {...{ [DROP_ATTRIBUTE]: "" }}>
-          <Icon icon={Icons.InboxIcon} /><span>No project</span>
+          <Icon icon={Icons.InboxIcon} /><span>{t("No project")}</span>
         </div>}
         {onProject && projectTree && projectTree.length > 0 && !(library && projectsFolded) && (
           <ProjectTreeNav projects={projectTree} current={current === "projects" ? projectId : null} onOpen={(id) => { setOwn(null); onProject(id); }} />
         )}
         {onProject && !projectTree && pinnedProjects.length > 0 && (
-          <ul className="el-nav-sub" aria-label="Pinned projects">
+          <ul className="el-nav-sub" aria-label={t("Pinned projects")}>
             {pinnedProjects.map((p) => (
               <li key={p.id} {...{ [DROP_ATTRIBUTE]: p.id }}><button type="button" className="el-nav-item el-nav-item--sub" dir="auto" aria-current={current === "projects" && projectId === p.id ? "page" : undefined}
                 onClick={() => { setOwn(null); onProject(p.id); }}>{p.name}</button></li>
@@ -671,25 +680,25 @@ function ShellSidebar({ tab, onGo, status, me, live, ask, notices, banners, acti
           </ul>
         )}
         </div>
-        {!library && item("live", "Live", Icons.WaveIcon)}
-        {!library && item("ask", "Ask", Icons.AskIcon)}
+        {!library && item("live", t("Live"), Icons.WaveIcon)}
+        {!library && item("ask", t("Ask"), Icons.AskIcon)}
       </Sidebar>
       {width !== undefined && onWidth && !rail && <ResizeEdge width={width} onWidth={onWidth} />}
-      <main className="el-shell__main" aria-label={own === "live" ? "Live" : own === "ask" ? "Ask" : undefined}>
+      <main className="el-shell__main" aria-label={own === "live" ? t("Live") : own === "ask" ? t("Ask") : undefined}>
         {notices}
         {banners}
         {own === "live" && live ? (
           <section className="content page-live">{live}</section>
         ) : own === "live" ? (
-          <EmptyState icon={Icons.RecordIcon} title="Live is on its way"
-            body="Live Assist, Live Translate and Dictation will have their place here. Until then, start them from the Record page or the tray."
-            action={<Button onClick={() => go("record")}>Open Record page</Button>} />
+          <EmptyState icon={Icons.RecordIcon} title={t("Live is on its way")}
+            body={t("Live Assist, Live Translate and Dictation will have their place here. Until then, start them from the Record page or the tray.")}
+            action={<Button onClick={() => go("record")}>{t("Open Record page")}</Button>} />
         ) : own === "ask" && ask ? (
           <section className="content page-ask">{ask}</section>
         ) : own === "ask" ? (
-          <EmptyState icon={Icons.AskIcon} title="Ask is on its way"
-            body="Questions across all your recordings will have their place here. Until then, ask inside a project, on its Notes tab."
-            action={<Button onClick={() => { setOwn(null); onGo("projects"); }}>Open Projects</Button>} />
+          <EmptyState icon={Icons.AskIcon} title={t("Ask is on its way")}
+            body={t("Questions across all your recordings will have their place here. Until then, ask inside a project, on its Notes tab.")}
+            action={<Button onClick={() => { setOwn(null); onGo("projects"); }}>{t("Open Projects")}</Button>} />
         ) : children}
       </main>
     </div>

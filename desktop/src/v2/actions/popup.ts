@@ -1,7 +1,7 @@
 // UX-22 (PLAN_V2_1_POLISH 3b): a right-click menu, shown each platform's way. On a Mac it is the system's own menu,
-// drawn by the core (native_menu_popup, as Record's menu is): Title Case, ticks, one level of sub-menus, hairlines and
-// a greyed title line for several ("3 Recordings"), no icons and no shortcuts. Nothing of it is kept on this side but
-// what its picks do. On Windows, in the browser and in the tests the menu is ours in Windows 11's style
+// drawn by the core (native_menu_popup, as Record's menu is): Title Case (in English), ticks, one level of sub-menus,
+// hairlines and a greyed title line for several ("3 Recordings"), no icons and no shortcuts. Nothing of it is kept on
+// this side but what its picks do. On Windows, in the browser and in the tests the menu is ours in Windows 11's style
 // (components/Menu.tsx ContextMenu), which the caller shows when popupNative answers false.
 //
 // Every system menu's pick comes back as `menu:action` (native_menu.rs: "<id>[@<target>][=<value>][~<n>]", a target's
@@ -11,6 +11,7 @@
 // the registry) while its menu is the open one, and dropping it once it is not, so a numbered pick never reaches the
 // registry by its bare id. A pick with no number (Record's menu, the menu bar) is not caught here.
 import { api, type NativeMenuItem } from "../../lib/ipc";
+import { language } from "../../i18n";
 import type { MenuItem } from "../components/Menu";
 import { macTitle, nativeItems, type Platform } from "./registry";
 import { parsePick, type MenuPick } from "./menuState";
@@ -20,8 +21,11 @@ export function currentPlatform(): Platform {
   return typeof navigator !== "undefined" && /Mac/i.test(navigator.platform) ? "macos" : "windows";
 }
 
-/** An app's own words in a menu (a title line, "No project", a sort order, a format), in the platform's case. */
-export const appWords = (words: string, platform: Platform = currentPlatform()) => (platform === "macos" ? macTitle(words) : words);
+/**
+ * An app's own words in a menu (a title line, "No project", a sort order, a format), in the platform's case: the Mac's
+ * Title Case in English only (Urdu has no case; D-248).
+ */
+export const appWords = (words: string, platform: Platform = currentPlatform()) => (platform === "macos" && language() === "en" ? macTitle(words) : words);
 
 /** What the open system menu's picks do (one menu at a time), by what each comes back as. */
 let picks = new Map<string, () => void>();

@@ -2,6 +2,9 @@
 // (P4.3) it also makes things (Upload, New project, Request link, Invite) and opens every page by name (a project, a
 // smart folder, a Settings page such as Devices); since v1.7 it finds every single setting too, in groups: Actions,
 // Settings, Pages, Recordings. It is the window's one search: the top bar's field and the sidebar's Search open it.
+// One of the classic pieces the new design shows, in the window's language (D-248, D-253): its frame (the field, the
+// groups' names, the foot, the empty lines), its own commands and their notices, the action list's commands and the
+// pages' "Go to" lines, each found by its words in that language and by its English (`name`).
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { api, type AppStatus, type SearchResult, type SmartFolder } from "../../lib/ipc";
 import { timestamp } from "../../lib/format";
@@ -14,10 +17,14 @@ import { featureWords, isLocked, lowestPlan, openUpgradeSheet, useEntitlements }
 import { BadgeMark } from "./Upgrade";
 import { LucideSearchIcon, LucideXIcon } from "../../components/Icons";
 import { ACTIONS, actionLabel, available, canRun, runAction, type ActionContext } from "../../v2/actions/registry";
+import { t, withParts } from "../../i18n";
 
 export interface PaletteCommand {
   id: string;
+  /** Its words in the window's language. */
   label: string;
+  /** Its English, when `label` is in the window's language: what it is found by too, and what lists it once. */
+  name?: string;
   /** Extra words the command answers to. */
   keywords?: string;
   /** A paid feature (v1.6.2): while the plan leaves it out the row wears its badge and opens the upgrade sheet instead. */
@@ -61,6 +68,30 @@ export function paletteScore(query: string, command: Pick<PaletteCommand, "label
   const startsWithTyped = (words: string[]) => typed.every((word, i) => (i < last ? words[i] === word : words[i]?.startsWith(word)));
   const place = GO_TO.test(command.label) ? wordsOf(command.label.replace(GO_TO, "")) : null;
   return startsWithTyped(name) || (place !== null && startsWithTyped(place)) ? 3 : 2;
+}
+
+/**
+ * How well a row matches (pure, D-248, D-253): by its words in the window's language or by its English name, whichever
+ * matches better, so in Urdu "لائبریری" and "library" both find Go to Library by its name. In English the two are one.
+ */
+export function commandScore(query: string, command: Pick<PaletteCommand, "label" | "name" | "keywords">): number {
+  const own = paletteScore(query, command);
+  return command.name === undefined || command.name === command.label ? own
+    : Math.max(own, paletteScore(query, { label: command.name, keywords: command.keywords }));
+}
+
+/** An action list's command's match (D-248): its words in the window's language, or its English. */
+export function actionScore(query: string, shown: string, english: string, keywords: string): number {
+  return commandScore(query, { label: shown, name: english, keywords });
+}
+
+/**
+ * A page's line ("Go to Storage · Settings › App"): in the window's language when the page's name is (a Settings page,
+ * ranked by its English `name`), so no line is half English; a page named in English (the shell's) as it was.
+ */
+export function goToLine(page: Pick<PageEntry, "label" | "group" | "name">): string {
+  const go = page.name !== undefined ? t("Go to :page", { page: page.label }) : `Go to ${page.label}`;
+  return `${go}${page.group ? ` · ${page.group}` : ""}`;
 }
 
 /** Whether a row matches what was typed at all ([`paletteScore`] above 0). */
@@ -129,49 +160,67 @@ export function paletteCommands(status: AppStatus, actions: {
   const extra = actions.extra ?? {};
   const recording = !!status.recording;
   const openFolder = actions.openFolder;
+  // Each command's words in the window's language, its English kept as its name (D-253). The keywords stay English:
+  // they are what may be typed, beside the name in either language.
+  const said = (english: string) => ({ label: t(english), name: english });
+  /** "Go to Library": the place's own name in the window's language (a folder's, a page's: never a person's words). */
+  const goTo = (place: string) => ({ label: t("Go to :page", { page: t(place) }), name: `Go to ${place}` });
   const list: PaletteCommand[] = [
     recording
-      ? { id: "stop", label: "Stop recording", keywords: "end finish save", run: () => actions.run(api.stopRecording) }
-      : { id: "start", label: actions.v2 ? "Record" : "Record now", keywords: "record now start recording call meeting voice note begin", run: () => actions.run(api.recordNow) },
+      ? { id: "stop", ...said("Stop recording"), keywords: "end finish save", run: () => actions.run(api.stopRecording) }
+      // The new design's Record is the verb here (ریکارڈ کریں), not the rail's place (ریکارڈ): a key of its own.
+      : { id: "start", ...(actions.v2 ? { label: t("palette_context.record"), name: "Record" } : said("Record now")), keywords: "record now start recording call meeting voice note begin", run: () => actions.run(api.recordNow) },
   ];
   if (recording) {
     list.push(status.paused
-      ? { id: "resume", label: "Resume recording", keywords: "continue", run: () => actions.run(api.resumeRecording) }
-      : { id: "pause", label: "Pause recording", keywords: "off the record hold", run: () => actions.run(api.pauseRecording) });
-    list.push({ id: "mark", label: "Bookmark this moment", keywords: "mark tag", run: () => actions.run(() => api.markMoment(), "Bookmarked", { kind: "page", page: "record" }) });
+      ? { id: "resume", ...said("Resume recording"), keywords: "continue", run: () => actions.run(api.resumeRecording) }
+      : { id: "pause", ...said("Pause recording"), keywords: "off the record hold", run: () => actions.run(api.pauseRecording) });
+    list.push({ id: "mark", ...said("Bookmark this moment"), keywords: "mark tag", run: () => actions.run(() => api.markMoment(), t("Bookmarked"), { kind: "page", page: "record" }) });
   }
   list.push(
-    { id: "captions", label: status.captionsLive ? "Turn captions off" : "Turn captions on", keywords: "live subtitles", run: () => actions.run(api.toggleCaptions) },
-    { id: "voice", label: "Capture voice note playing now", keywords: "whatsapp audio", run: () => actions.run(api.toggleVoiceNote) },
+    { id: "captions", ...said(status.captionsLive ? "Turn captions off" : "Turn captions on"), keywords: "live subtitles", run: () => actions.run(api.toggleCaptions) },
+    { id: "voice", ...said("Capture voice note playing now"), keywords: "whatsapp audio", run: () => actions.run(api.toggleVoiceNote) },
     ...(recording && status.recording?.mode !== "mic_note" ? [] : [{
-      id: "mic_note", label: status.recording?.mode === "mic_note" ? "Stop and save voice note" : "Record a voice note", keywords: "microphone new dictate n",
+      id: "mic_note", ...said(status.recording?.mode === "mic_note" ? "Stop and save voice note" : "Record a voice note"), keywords: "microphone new dictate n",
       run: () => actions.run(api.toggleMicNote),
     }]),
-    { id: "live-translate", label: "Live Translate", keywords: "translate subtitles captions game video language", feature: "live_translate", run: () => actions.go("record") },
-    { id: "copy", label: "Copy the last 2 minutes of captions", keywords: "clipboard", run: () => actions.run(() => api.copyLastMinutes(2)) },
-    ...(extra.upload ? [{ id: "upload", label: "Upload files", keywords: "import audio video voice notes add", run: extra.upload }] : []),
-    ...(extra.newProject ? [{ id: "new-project", label: "New project", keywords: "create client folder add", run: extra.newProject }] : []),
-    ...(extra.requestLink ? [{ id: "request-link", label: "Request link", keywords: "request files send me voice notes upload link", run: extra.requestLink }] : []),
-    ...(extra.invite ? [{ id: "invite", label: "Invite people to the workspace", keywords: "invite team teammate member add person", feature: "team", run: extra.invite }] : []),
-    { id: "sync", label: "Sync the library", keywords: "refresh download", run: () => actions.run(api.refreshLibrary, "Library synced", { kind: "library", view: null }) },
-    { id: "library", label: "Go to Library", keywords: "recordings transcripts", run: () => actions.go("library") },
+    { id: "live-translate", ...said("Live Translate"), keywords: "translate subtitles captions game video language", feature: "live_translate", run: () => actions.go("record") },
+    { id: "copy", ...said("Copy the last 2 minutes of captions"), keywords: "clipboard", run: () => actions.run(() => api.copyLastMinutes(2)) },
+    ...(extra.upload ? [{ id: "upload", ...said("Upload files"), keywords: "import audio video voice notes add", run: extra.upload }] : []),
+    ...(extra.newProject ? [{ id: "new-project", ...said("New project"), keywords: "create client folder add", run: extra.newProject }] : []),
+    ...(extra.requestLink ? [{ id: "request-link", ...said("Request link"), keywords: "request files send me voice notes upload link", run: extra.requestLink }] : []),
+    ...(extra.invite ? [{ id: "invite", ...said("Invite people to the workspace"), keywords: "invite team teammate member add person", feature: "team", run: extra.invite }] : []),
+    { id: "sync", ...said("Sync the library"), keywords: "refresh download", run: () => actions.run(api.refreshLibrary, t("Library synced"), { kind: "library", view: null }) },
+    { id: "library", ...goTo("Library"), keywords: "recordings transcripts", run: () => actions.go("library") },
     ...(openFolder ? (actions.folders ?? []).map(({ folder, label }) => (
       actions.v2 && V2_FOLDER_WORDS[folder]
-        ? { id: `folder-${folder}`, label: V2_FOLDER_WORDS[folder]!, keywords: `${label} source filter show only library recordings`, run: () => openFolder(folder) }
-        : { id: `folder-${folder}`, label: `Go to ${label}`, keywords: "smart folder library recordings", run: () => openFolder(folder) }
+        ? { id: `folder-${folder}`, ...said(V2_FOLDER_WORDS[folder]!), keywords: `${label} source filter show only library recordings`, run: () => openFolder(folder) }
+        : { id: `folder-${folder}`, ...goTo(label), keywords: "smart folder library recordings", run: () => openFolder(folder) }
     )) : []),
-    { id: "projects", label: "Go to Projects", keywords: "clients folders workspace brief notes files ask", run: () => actions.go("projects") },
-    { id: "record", label: actions.v2 ? "Go to Record page" : "Go to Home", keywords: actions.v2 ? "home record microphone detection start live assist" : "record microphone detection start", run: () => actions.go("record") },
-    { id: "ready", label: "Check calls will be recorded", keywords: "ready check permissions microphone fix readiness", run: () => actions.go("record") },
-    { id: "activity", label: "Go to Activity", keywords: "notifications bell", run: () => actions.go("activity") },
-    { id: "shared", label: "Go to Shared", keywords: "shared with me links request links", run: () => actions.go("shared") },
-    { id: "settings", label: "Go to Settings", keywords: "settings preferences account profile", run: () => actions.go("settings") },
+    { id: "projects", ...goTo("Projects"), keywords: "clients folders workspace brief notes files ask", run: () => actions.go("projects") },
+    // "Go to Record page" has a line of its own: Urdu bends the page's name before پر (ریکارڈ کے صفحے پر).
+    { id: "record", ...(actions.v2 ? said("Go to Record page") : goTo("Home")), keywords: actions.v2 ? "home record microphone detection start live assist" : "record microphone detection start", run: () => actions.go("record") },
+    { id: "ready", ...said("Check calls will be recorded"), keywords: "ready check permissions microphone fix readiness", run: () => actions.go("record") },
+    { id: "activity", ...goTo("Activity"), keywords: "notifications bell", run: () => actions.go("activity") },
+    { id: "shared", ...goTo("Shared"), keywords: "shared with me links request links", run: () => actions.go("shared") },
+    { id: "settings", ...goTo("Settings"), keywords: "settings preferences account profile", run: () => actions.go("settings") },
     ...(extra.upgrade ? [extra.upgrade.open
-      ? { id: "upgrade", label: "Your upgrade request", keywords: "plan payment receipt pending status", run: extra.upgrade.run }
-      : { id: "upgrade", label: "Upgrade plan", keywords: "pro ultra buy price plan", run: extra.upgrade.run }] : []),
-    ...(extra.help ? [{ id: "help", label: "Help & shortcuts", keywords: "keys keyboard help", run: extra.help }] : []),
+      ? { id: "upgrade", ...said("Your upgrade request"), keywords: "plan payment receipt pending status", run: extra.upgrade.run }
+      : { id: "upgrade", ...said("Upgrade plan"), keywords: "pro ultra buy price plan", run: extra.upgrade.run }] : []),
+    ...(extra.help ? [{ id: "help", ...said("Help & shortcuts"), keywords: "keys keyboard help", run: extra.help }] : []),
   );
   return list;
+}
+
+/**
+ * The words a locked command's row says to a screen reader after its name (", Live Translate is in Pro"): the feature's
+ * name in the window's language where the catalogue has it (the server's names are English: "Team workspace" is ٹیم
+ * ورک اسپیس), else as the server wrote it; the plan's name as it is, or "a paid plan" when the answer names none.
+ */
+export function lockedWords(name: string, plan: string | null | undefined): string {
+  const feature = t(name);
+  const placed = plan === null || plan === undefined ? t(":feature is in a paid plan", { feature }) : t(":feature is in :plan", { feature, plan });
+  return `${t("shell_context.separator")}${placed}`;
 }
 
 export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, folders, onFolder, pages = [], extra, settings, look = "classic", initialQuery = "", inRow = false, onShowAll, onAsk, actionState }: {
@@ -264,13 +313,14 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
     };
   }, [query]);
 
-  // Every group ranked by name first; a word only inside another word never matches (D-087).
-  const actions = ranked(commands, (c) => paletteScore(query, c));
+  // Every group ranked by name first (in the window's language or in English); a word only inside another word never
+  // matches (D-087).
+  const actions = ranked(commands, (c) => commandScore(query, c));
   const matching = actions.map((a) => a.row);
   // Pages by name (a project, a folder, Devices…) that no command above already opens.
-  const pageRows = ranked(pages.filter((p) => !matching.some((c) => c.label === `Go to ${p.name ?? p.label}`)),
-    (p) => (query.trim() ? paletteScore(query, { label: p.name ?? p.label, keywords: `${p.group ?? ""} ${p.keywords ?? ""}` }) : 0)).slice(0, 6);
-  const pageHits = pageRows.map(({ row: p }) => ({ id: `page-${p.id}`, label: `Go to ${p.label}${p.group ? ` · ${p.group}` : ""}`, run: p.open }));
+  const pageRows = ranked(pages.filter((p) => !matching.some((c) => (c.name ?? c.label) === `Go to ${p.name ?? p.label}`)),
+    (p) => (query.trim() ? commandScore(query, { label: p.label, name: p.name, keywords: `${p.group ?? ""} ${p.keywords ?? ""}` }) : 0)).slice(0, 6);
+  const pageHits = pageRows.map(({ row: p }) => ({ id: `page-${p.id}`, label: goToLine(p), run: p.open }));
   // Shown in the window's language, ranked by the name they answer to (the English title what was typed matches).
   const settingHits: (PaletteCommand & { crumb: string; rank: string })[] = query.trim().length >= 2 && settings
     ? settings(query).map((x) => ({ id: `setting-${x.id}`, label: x.title, crumb: x.breadcrumb, rank: x.name ?? x.title, run: x.open })) : [];
@@ -289,21 +339,23 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
     const projectRows = pageRows.filter((p) => isProject(p.row.id));
     const otherPages = pageRows.filter((p) => !isProject(p.row.id));
     // The window's own state (can it record, the ticks), so a command shows only where it can run, in its state's words.
-    // The search list speaks in sentence case (3b: only the Mac's menus use Title Case).
+    // The search list speaks in sentence case (3b: only the Mac's menus use Title Case), in the window's language.
     const ctx: ActionContext = { platform: status.platform === "macos" ? "macos" : "windows", state: { recording: !!status.recording, ...actionState } };
     const words = (id: string) => actionLabel(id, { ...ctx, platform: "windows" });
-    const taken = new Set(matching.map((c) => c.label.toLowerCase()));
-    const registry = ranked(ACTIONS.filter((a) => canRun(a.id) && available(a.id, ctx) && !taken.has(words(a.id).toLowerCase())),
-      (a) => (q ? paletteScore(query, { label: words(a.id), keywords: `${a.label} ${a.menu ?? ""}` }) : 0))
+    // Its English: what the palette's own commands are named (one command is listed once), and what may be typed.
+    const english = (id: string) => actionLabel(id, { ...ctx, platform: "windows" }, "en");
+    const taken = new Set(matching.map((c) => (c.name ?? c.label).toLowerCase()));
+    const registry = ranked(ACTIONS.filter((a) => canRun(a.id) && available(a.id, ctx) && !taken.has(english(a.id).toLowerCase())),
+      (a) => (q ? actionScore(query, words(a.id), english(a.id), `${a.label} ${a.menu ?? ""}`) : 0))
       .map(({ row: a, score }) => ({
-        row: { id: `action-${a.id}`, label: words(a.id), detail: a.state?.check ? (ctx.state?.[a.state.check] ? "On" : "Off") : undefined,
+        row: { id: `action-${a.id}`, label: words(a.id), detail: a.state?.check ? (ctx.state?.[a.state.check] ? t("On") : t("Off")) : undefined,
           run: () => void runAction(a.id, ctx) } as PaletteCommand,
         score,
       }));
-    const showAll: PaletteCommand[] = onShowAll && q.length >= 2 ? [{ id: "show-all", label: "Show all in the list", run: () => onShowAll(q) }] : [];
+    const showAll: PaletteCommand[] = onShowAll && q.length >= 2 ? [{ id: "show-all", label: t("Show all in the list"), run: () => onShowAll(q) }] : [];
     const ask: PaletteCommand[] = onAsk && q.length >= 2
-      ? [{ id: "ask", label: `Ask about “${q}”`, view: <>Ask about “<bdi>{q}</bdi>”</>, run: () => onAsk(q) }] : [];
-    const otherHits = otherPages.map(({ row: p }) => ({ id: `page-${p.id}`, label: `Go to ${p.label}${p.group ? ` · ${p.group}` : ""}`, run: p.open }));
+      ? [{ id: "ask", label: t("Ask about “:q”", { q }), view: <>{withParts(t("Ask about “:q”"), { q: <bdi>{q}</bdi> })}</>, run: () => onAsk(q) }] : [];
+    const otherHits = otherPages.map(({ row: p }) => ({ id: `page-${p.id}`, label: goToLine(p), run: p.open }));
     return [
       ["Recordings", [...recordings, ...showAll], [...recordings.map((r) => nameScore(r.label)), ...showAll.map(() => 0)]],
       ["Projects", projectRows.map(({ row: p }) => ({ id: `page-${p.id}`, label: p.label, run: p.open })), projectRows.map((p) => p.score)],
@@ -372,19 +424,19 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
       e.preventDefault();
       dismiss();
     }}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={onKey} style={fromRow ?? undefined}>
+      <div className="palette" role="dialog" aria-modal="true" aria-label={t("Command palette")} onKeyDown={onKey} style={fromRow ?? undefined}>
         <div className="palette-field">
           <LucideSearchIcon size={16} />
-          <input ref={inputRef} className="input palette-input" autoFocus value={query} placeholder="Search recordings, settings, pages… or type a command"
+          <input ref={inputRef} className="input palette-input" autoFocus value={query} placeholder={t("Search recordings, settings, pages… or type a command")}
             role="combobox" aria-expanded="true" aria-controls={listId} aria-activedescendant={options[selected] ? `${listId}-${options[selected].id}` : undefined}
             dir="auto" onChange={(e) => { setQuery(e.target.value); setChosen(null); }} />
-          {query && <button type="button" className="btn ghost icon-only palette-clear" aria-label="Clear" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); setChosen(null); inputRef.current?.focus(); }}><LucideXIcon size={14} /></button>}
+          {query && <button type="button" className="btn ghost icon-only palette-clear" aria-label={t("Clear")} onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); setChosen(null); inputRef.current?.focus(); }}><LucideXIcon size={14} /></button>}
         </div>
-        <div id={listId} className="palette-list" role="listbox" aria-label="Results">
+        <div id={listId} className="palette-list" role="listbox" aria-label={t("Results")}>
           {options.length === 0 && <div className="palette-empty small muted" role="status">{emptyLine(query, lookingUp)}</div>}
           {groups.map(([name, list]) => (
             <div key={name} role="group" aria-labelledby={`${listId}-g-${name}`} className="palette-group">
-              <div id={`${listId}-g-${name}`} className="palette-group-head" role="presentation">{name}</div>
+              <div id={`${listId}-g-${name}`} className="palette-group-head" role="presentation">{t(name)}</div>
               {list.map((o) => {
                 const i = options.indexOf(o);
                 const record = found.find((r) => `rec-${r.session.id}` === o.id);
@@ -395,7 +447,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
                     onMouseMove={(e) => pointed(e, i)} onMouseDown={(e) => { e.preventDefault(); choose(o); }}>
                     <span className="palette-label">{record && inRow ? marked(o.label, query) : o.view ?? o.label}{o.feature && <BadgeMark feature={o.feature} />}</span>
                     {o.detail && <span className="palette-detail small muted">{o.detail}</span>}
-                    {o.feature && isLocked(entitlements, o.feature) && <span className="sr-only">, {featureWords(entitlements, o.feature).name} is in {lowestPlan(entitlements, o.feature)?.name ?? "a paid plan"}</span>}
+                    {o.feature && isLocked(entitlements, o.feature) && <span className="sr-only">{lockedWords(featureWords(entitlements, o.feature).name, lowestPlan(entitlements, o.feature)?.name)}</span>}
                     {crumb && <span className="palette-detail small muted">{crumb}</span>}
                     {hit && (
                       <span className="palette-detail small muted" dir="auto">{timestamp(hit.start_ms)} · {snippetParts(hit.snippet, hit.highlights).map((p, k) => (p.hit ? <mark key={k}>{p.text}</mark> : <span key={k}>{p.text}</span>))}</span>
@@ -406,7 +458,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
             </div>
           ))}
         </div>
-        <div className="palette-foot small muted">↑ ↓ to choose · Enter to run · Esc to close</div>
+        <div className="palette-foot small muted">{t("↑ ↓ to choose · Enter to run · Esc to close")}</div>
       </div>
     </div>
   );
@@ -437,7 +489,7 @@ export function marked(title: string, query: string): ReactNode {
  * for another rather than saying nothing matches. */
 export function emptyLine(query: string, lookingUp: boolean): string {
   const q = query.trim();
-  if (q.length === 1) return "Type one more letter to search recordings.";
-  if (lookingUp) return "Searching recordings and transcripts…";
-  return `Nothing matches “${q}” in recordings, transcripts, settings or pages.`;
+  if (q.length === 1) return t("Type one more letter to search recordings.");
+  if (lookingUp) return t("Searching recordings and transcripts…");
+  return t("Nothing matches “:q” in recordings, transcripts, settings or pages.", { q });
 }

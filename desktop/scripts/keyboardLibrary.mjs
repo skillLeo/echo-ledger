@@ -48,7 +48,7 @@ async function walk(lang, platform) {
   const where = platform === "windows" ? "&platform=windows" : "&platform=macos&lights=1";
   const flags = platform === "windows" ? `${V2_FLAGS},v21_win_titlebar` : V2_FLAGS;
   await page.goto(`${base}scripts/screens/index.html?screen=library&uiflags=${flags}${where}${lang === "ur" ? "&lang=ur" : ""}`);
-  await page.getByRole("navigation", { name: "Main" }).waitFor();
+  await page.locator('nav[data-nav="main"]').waitFor();
   await page.waitForTimeout(1500);
   const log = [];
   const tag = `${lang} ${platform}`;

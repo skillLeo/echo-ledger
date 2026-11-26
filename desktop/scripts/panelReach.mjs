@@ -39,7 +39,7 @@ try {
   await page.goto(`${base}scripts/screens/index.html?screen=library&theme=light&uiflags=${FLAGS},v21_panel_flyout`);
   await page.getByRole("button", { name: "Library", exact: true }).last().click();
   await page.locator("button[data-row-id]").first().waitFor();
-  const rail = page.getByRole("navigation", { name: "Main" });
+  const rail = page.locator('nav[data-nav="main"]');
   const panel = page.getByTestId("nav-panel");
   const places = ["Library", "Projects", "Live", "Ask", "Activity", "Settings"];
   for (const place of places) {

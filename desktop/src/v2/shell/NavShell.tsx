@@ -11,10 +11,11 @@ import { useTip } from "../components/Tip";
 import { initials } from "../settings/initials";
 import { useMenuPart } from "../actions/menuState";
 import { PageTitleSlot, usePageTitleSlot } from "../pageTitle";
-import { accountTip, PageHistoryContext, PANEL_MAX, PANEL_MIN, PLACE_NAMES, PanelToggleContext, PlacePanel, placeList, RAIL_PLACES, RailItem, panelDefault, placeMenuItems, railFit, railItemProps, RailMore, SHOW_PANEL_EVENT, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
+import { accountTip, PageHistoryContext, PANEL_MAX, PANEL_MIN, PanelToggleContext, PlacePanel, placeList, placeName, RAIL_PLACES, RailItem, panelDefault, placeMenuItems, railFit, railItemProps, RailMore, SHOW_PANEL_EVENT, spokenParts, type FlyoutClose, type PageHistory, type Place } from "./NavRail";
 import { TitleRow } from "./TitleRow";
 import { readKept, writeKept } from "./kept";
 import { FAILED_WORDS, railBadgeLabel } from "../../lib/badge";
+import { t } from "../../i18n";
 import { RecordSplit } from "./RecordSplit";
 import { useRailKeys } from "./railKeys";
 import { matchesShortcut, menuItems, registerAction, runAction, shortcutOf, type ActionContext } from "../actions/registry";
@@ -450,7 +451,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   // ⊟ in the title row (UX-20, right after the window's buttons) while the panel is off the screen, and in a small window
   // while its flyout is open (expanded: focus goes back to it); in a small window, the pin (UX-02).
   const rowToggle = hasPanel && (narrow || !shown) ? {
-    label: `Show the ${PLACE_NAMES[place!]} panel`,
+    label: t("Show the :place panel", { place: placeName(place!) }),
     expanded: narrow ? shown : undefined,
     onToggle: (button: HTMLElement) => {
       if (narrow) {
@@ -518,7 +519,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   // The avatar's menu (DES-08): in a short window Setup and Help come first in it; when not even More fits (UX-07), the
   // places before them, set apart by a hairline.
   const rest: MenuItem[] = [
-    ...(short ? [{ label: "Setup & health", icon: Icons.ReadyIcon, onPick: onSetupHealth }, ...(onHelp ? [{ label: "Help", icon: Icons.HelpIcon, onPick: onHelp }] : [])] : []),
+    ...(short ? [{ label: t("Setup & health"), icon: Icons.ReadyIcon, onPick: onSetupHealth }, ...(onHelp ? [{ label: t("Help"), icon: Icons.HelpIcon, onPick: onHelp }] : [])] : []),
     ...(account ?? []),
   ];
   const accountItems: MenuItem[] = inAccount.length
@@ -530,10 +531,9 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const meFailed = !!meCount && activityTone === "danger";
   const meLive = !meCount && inAccount.includes("live") && !!liveDot;
   const meHere = !!place && inAccount.includes(place);
-  const meName = [`Account, ${me?.name ?? ""}`, inAccount.length ? `with ${placeList(inAccount)}` : null, meCount ? `${PLACE_NAMES.activity} ${meCount}` : null,
-    meFailed ? FAILED_WORDS : null,
-    inAccount.includes("live") && liveDot && liveDotWords ? `${PLACE_NAMES.live} ${liveDotWords}` : null, short && setupAttention ? "needs setup" : null]
-    .filter(Boolean).join(", ");
+  const meName = spokenParts([t("Account, :name", { name: me?.name ?? "" }), inAccount.length ? t("with :places", { places: placeList(inAccount) }) : null,
+    meCount ? `${placeName("activity")} ${meCount}` : null, meFailed ? t(FAILED_WORDS) : null,
+    inAccount.includes("live") && liveDot && liveDotWords ? `${placeName("live")} ${liveDotWords}` : null, short && setupAttention ? t("needs setup") : null]);
   const [meTip, meTipShown] = useTip(accountTip(inAccount, meFailed));
   // FIX-06: the rail is one Tab stop, ↑ ↓ Home End go through it.
   const railRef = useRef<HTMLElement>(null);
@@ -542,7 +542,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
   const scrim = shown && narrow && panelFlyout;
   return (
     <div ref={box} className={`el-root el-shell el-shell--nav${shown ? " el-shell--panel" : ""}${narrow ? " el-shell--narrow" : ""}${short ? " el-shell--short" : ""}${panelFlyout ? " el-shell--flyouts" : ""}`} data-shell="v2">
-      <nav ref={railRef} className={`el-rail${compactRail ? " el-rail--compact" : ""}`} aria-label="Main" onFocus={railKeys.onFocus} onKeyDownCapture={railKeys.onKeyDownCapture}>
+      <nav ref={railRef} className={`el-rail${compactRail ? " el-rail--compact" : ""}`} aria-label={t("Main")} data-nav="main" onFocus={railKeys.onFocus} onKeyDownCapture={railKeys.onKeyDownCapture}>
         {/* The rail's top cell of the title row: the Mac's window buttons sit here (tauri.conf.json trafficLightPosition);
             it moves the window. 8 px in full screen; none on Windows under its system title bar, and with Windows' own
             title row (v21_win_titlebar) 48 px with the app's mark. */}
@@ -560,12 +560,12 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
           )}
         </div>
         <div className="el-rail__foot">
-          {!short && <RailItem icon={Icons.ReadyIcon} label="Setup" current={false} onClick={onSetupHealth} dot={setupAttention} dotLabel="needs setup" />}
-          {!short && onHelp && <RailItem icon={Icons.HelpIcon} label="Help" current={false} onClick={onHelp} />}
+          {!short && <RailItem icon={Icons.ReadyIcon} label={t("Setup")} current={false} onClick={onSetupHealth} dot={setupAttention} dotLabel={t("needs setup")} />}
+          {!short && onHelp && <RailItem icon={Icons.HelpIcon} label={t("Help")} current={false} onClick={onHelp} />}
           {railPlace("settings")}
           {me && account && (
             <div className="el-rail__me">
-              <Menu label={`Account, ${me.name}`} items={accountItems} align="start"
+              <Menu label={t("Account, :name", { name: me.name })} items={accountItems} align="start"
                 header={(
                   <div className="el-account-head">
                     <Avatar initials={initials(me.name, me.email)} size="menu" color={me.color} seed={me.email} photo={me.photo} />
@@ -582,7 +582,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, activit
                     {meCount ? <span className={`el-rail__count el-num${meFailed ? " el-rail__count--danger" : ""}`} data-count={railBadgeLabel(meCount) ?? undefined} aria-hidden="true" />
                       : meLive ? <span className="el-rail__dot el-rail__dot--live" aria-hidden="true" />
                         : short && setupAttention && <span className="el-rail__dot" aria-hidden="true" />}</span>
-                    <span className="el-rail__label" aria-hidden="true">Account</span></> }} />
+                    <span className="el-rail__label" aria-hidden="true">{t("Account")}</span></> }} />
               {meTipShown}
             </div>
           )}

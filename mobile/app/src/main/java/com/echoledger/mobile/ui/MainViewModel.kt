@@ -603,6 +603,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val languageTurn = java.util.concurrent.atomic.AtomicLong()
     private var confirmedCall = 0L
 
+    /** The number of the latest call the server refused: its refusal shows only until an earlier call's answer lands. */
+    private var refusedCall = 0L
+
     /** The changes of the account's language still on their way, their answer not applied yet (for the tests). */
     @androidx.annotation.VisibleForTesting
     internal fun languageChangesInFlight(): Int = languagePatches.get()
@@ -616,7 +619,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Settings › Appearance › App language while signed in: the account's language (`PATCH /api/account`), so it
      * changes on every device. Shown at once. Only the latest choice applies its answer; when the server refuses it,
-     * the language the server last said comes back, with a message. The choice made while signed out is not touched.
+     * the language the server last said comes back, with a message. An earlier choice still on its way may answer after
+     * that refusal: once the last of them has, the phone shows what the server confirmed last, so the two agree (P-128).
+     * The choice made while signed out is not touched.
      */
     fun setAccountLanguage(language: String) = viewModelScope.launch {
         val call = languageCall.incrementAndGet()
@@ -636,12 +641,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 confirmedCall = call
                 confirmedLanguage = now
             }
-            if (call != languageCall.get()) return@launch
+            if (call != languageCall.get()) {
+                // The latest was refused and this was the last change on its way: the server holds what it confirmed last.
+                if (refusedCall == languageCall.get() && languagePatches.get() == 1) {
+                    graph.settings.update { it.copy(accountLanguage = confirmedLanguage) }
+                }
+                return@launch
+            }
             if (saved != null) {
                 graph.settings.update {
                     it.copy(accountLanguage = now, avatarColor = saved.avatarColor?.takeIf { c -> c in 0..7 } ?: it.avatarColor)
                 }
             } else {
+                refusedCall = call
                 graph.settings.update { it.copy(accountLanguage = confirmedLanguage) }
                 _message.value = com.echoledger.mobile.notify.AppWords.resources(getApplication())
                     .getString(com.echoledger.mobile.R.string.v2_set_language_not_saved)
