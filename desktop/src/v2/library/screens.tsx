@@ -143,8 +143,8 @@ export function ScreenViewerV2({ screens, index, said, onIndex, onClose, onPlay,
           )}
         </section>
         {screen.ocr_text?.trim() && (
-          <details className="el-screen-viewer__text">
-            <summary>{t("Text on the screen")}</summary>
+          <details className="el-more el-screen-viewer__text">
+            <summary><Icon icon={Icons.ChevronEndIcon} directional />{t("Text on the screen")}</summary>
             <p dir="auto">{screen.ocr_text}</p>
           </details>
         )}
