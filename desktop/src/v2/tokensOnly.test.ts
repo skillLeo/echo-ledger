@@ -135,3 +135,18 @@ describe("scaled fills", () => {
       .toContain('<summary><Icon icon={Icons.ChevronEndIcon} directional />{t("Text on the screen")}</summary>');
   });
 });
+
+// D-262: in Urdu a row's title and meta give Nastaliq room on every side inside their clip box, given back by margins
+// (scripts/urduD261.mjs measures the ink); the Back to top button is named in the window's language.
+describe("Urdu in the shared row and Back to top (D-262)", () => {
+  it("the row's clipped text has Nastaliq's room in Urdu, and its layout is given back", () => {
+    const css = readFileSync(join(here, "styles", "v2.css"), "utf8");
+    const rule = css.match(/:lang\(ur\) :is\(\.el-row__title, \.el-row__meta-text\) \{[^}]*\}/)?.[0] ?? "";
+    expect(rule).toContain("padding: var(--el-space-12) var(--el-space-8) var(--el-space-4);");
+    expect(rule).toContain("margin: calc(-1 * var(--el-space-12)) calc(-1 * var(--el-space-8)) calc(-1 * var(--el-space-4));");
+  });
+  it("Back to top is named through t()", () => {
+    const src = readFileSync(join(here, "components", "BackToTop.tsx"), "utf8");
+    expect(src).toContain('aria-label={t("Back to top")} title={t("Back to top")}');
+  });
+});

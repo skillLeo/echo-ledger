@@ -42,4 +42,20 @@ export const CONTEXT_EN: Readonly<Record<string, string>> = {
   // The new design's Record command: the verb (ریکارڈ کریں), where the rail's Record is the place (ur.json's "Record",
   // ریکارڈ).
   "palette_context.record": "Record",
+  // D-261: the Record page's heading, Home in English, named in Urdu as the Record menu and the window's search name the
+  // page (ریکارڈ کا صفحہ); and its and Live's Record button, the verb (ریکارڈ کریں), where the rail's Record is the place.
+  "home_context.title": "Home",
+  "home_context.record": "Record",
+  // A project's page (D-261): a memory line's kind Change is a change that was made (تبدیلی), not the verb (ur.json's
+  // "Change", بدلیں); a file's kind, Word (the format's name, as it is) and Text (a plain text file, ٹیکسٹ); and between
+  // the ways a person can open the project ("Sent to them …; Through a share link"): Urdu's semicolon (؛) in Urdu.
+  "workspace_context.memory_change": "Change",
+  "workspace_context.kind_word": "Word",
+  "workspace_context.kind_text": "Text",
+  "workspace_context.ways_separator": "; ",
+  // A call note's change (D-261, NotesSections): what was added, removed or changed, nouns (اضافہ, حذف, ترمیم), not the
+  // buttons' verbs (ur.json's "Add" شامل کریں, "Remove" ہٹائیں, "Change" بدلیں).
+  "notes_context.change_add": "Add",
+  "notes_context.change_remove": "Remove",
+  "notes_context.change_modify": "Change",
 };

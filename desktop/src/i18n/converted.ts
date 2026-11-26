@@ -97,4 +97,19 @@ export const CONVERTED: readonly string[] = [
   "v2/shell/Zoom.tsx",
   "v2/shell/WindowButtons.tsx",
   "v2/shell/PlacePanels.tsx",
+  // D-261: the Record page and Live (the Record section, Live Assist's sessions and Live Translate's panel). What the
+  // core says (a permission's or a device's note, an upload's error, an app's name) is shown as it comes.
+  "v2/home/HomeV2.tsx",
+  "v2/home/RecordSection.tsx",
+  "v2/live/LiveV2.tsx",
+  "v2/live/LiveAssistSection.tsx",
+  "v2/live/LiveTranslateV2.tsx",
+  // D-261: a project's page in the new design (its header, tabs and the Recordings, Files, Memory & instructions and
+  // Members tabs).
+  "v2/workspace/WorkspaceV2.tsx",
+  "v2/workspace/RecordingsTab.tsx",
+  "v2/workspace/FilesTab.tsx",
+  "v2/workspace/MembersTab.tsx",
+  // and its Ask tab, which is the Ask page too.
+  "v2/ask/AskV2.tsx",
 ];

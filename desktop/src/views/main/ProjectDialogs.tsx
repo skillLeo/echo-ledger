@@ -6,6 +6,7 @@ import { api, errorMessage, type ClientFolder } from "../../lib/ipc";
 import { canMoveTo, projectLabel, projectTree, subtreeIds, visibleRows } from "../../lib/projects";
 import { CloseIcon, FolderIcon, InboxIcon, PlusIcon, SearchIcon } from "../../components/Icons";
 import type { Notify } from "../../lib/notice";
+import { wordsIn, type Lang } from "../../i18n";
 
 /** Moves recordings into a project (null: the Inbox): one through its own change, several in one bulk action. */
 export async function moveRecordings(ids: readonly string[], projectId: string | null): Promise<void> {
@@ -13,10 +14,20 @@ export async function moveRecordings(ids: readonly string[], projectId: string |
   else await api.bulkSessions([...ids], "move", projectId);
 }
 
-/** "Moved “Kick-off” to Acme › Invoices", "Moved 3 recordings to the Inbox". */
-export function movedText(count: number, title: string | null | undefined, projects: readonly ClientFolder[], projectId: string | null): string {
-  const where = projectId ? projectLabel(projects, projectId) || "the project" : "the Inbox";
-  return count === 1 ? `Moved “${title || "the recording"}” to ${where}` : `Moved ${count} recordings to ${where}`;
+/**
+ * "Moved “Kick-off” to Acme › Invoices", "Moved 3 recordings to the Inbox": in `lang` (the window's language when left
+ * out; a classic page passes "en"), the title and the project's name as they are.
+ */
+export function movedText(count: number, title: string | null | undefined, projects: readonly ClientFolder[], projectId: string | null, lang?: Lang): string {
+  const { t, tc } = wordsIn(lang);
+  const project = projectId ? projectLabel(projects, projectId) : "";
+  if (count === 1) {
+    if (!projectId) return title ? t("Moved “:title” to the Inbox", { title }) : t("Moved “the recording” to the Inbox");
+    if (title) return project ? t("Moved “:title” to :project", { title, project }) : t("Moved “:title” to the project", { title });
+    return project ? t("Moved “the recording” to :project", { project }) : t("Moved “the recording” to the project");
+  }
+  if (!projectId) return tc("Moved :count recordings to the Inbox", count);
+  return project ? tc("Moved :count recordings to :project", count, { project }) : tc("Moved :count recordings to the project", count);
 }
 
 /** A dialog sheet: Escape or a click beside it closes it, except while it is busy. */
@@ -94,7 +105,7 @@ export function NameDialog({ title, initial = "", submitLabel, hint, onSubmit, o
  * The projects to pick from, indented by level, under one row for no project (`top`: the Inbox for recordings, the top
  * level for a project). `blocked` says why a row cannot be picked (null when it can). A search narrows a long list.
  */
-export function ProjectPicker({ projects, top, value, onChange, blocked, label }: {
+export function ProjectPicker({ projects, top, value, onChange, blocked, label, lang = "en" }: {
   projects: readonly ClientFolder[];
   top: { label: string; inbox: boolean };
   /** The chosen row: a project's id, null for the top row, undefined while nothing is chosen. */
@@ -102,7 +113,10 @@ export function ProjectPicker({ projects, top, value, onChange, blocked, label }
   onChange: (id: string | null) => void;
   blocked: (id: string | null) => string | null;
   label: string;
+  /** Its own words' language: classic's English, the window's when the new design opens it (D-263). */
+  lang?: Lang;
 }) {
+  const { t } = wordsIn(lang);
   const [query, setQuery] = useState("");
   const group = useId();
   const rows = useMemo(() => visibleRows(projectTree(projects), "all"), [projects]);
@@ -124,34 +138,37 @@ export function ProjectPicker({ projects, top, value, onChange, blocked, label }
       {rows.length > 6 && (
         <label className="searchbox compact">
           <SearchIcon size={16} />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a project" aria-label="Find a project" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Find a project")} aria-label={t("Find a project")} />
         </label>
       )}
       <div className="pick-list" role="radiogroup" aria-label={label}>
         {!q && row(null, top.label, 0, top.inbox ? <InboxIcon size={16} /> : <FolderIcon size={16} />)}
         {shown.map((r) => row(r.project.id, q ? projectLabel(projects, r.project.id) : r.project.name, q ? 0 : r.depth, <FolderIcon size={16} />))}
-        {q && shown.length === 0 && <p className="small muted">No project is called that.</p>}
+        {q && shown.length === 0 && <p className="small muted">{t("No project is called that.")}</p>}
       </div>
     </div>
   );
 }
 
-/** Why a project cannot move under a target (null when it can), in the words the picker shows. */
-export function moveBlock(projects: readonly ClientFolder[], project: ClientFolder, target: string | null): string | null {
-  if (target === (project.parent_id ?? null)) return "It is here now";
-  if (target === project.id) return "This project";
-  if (target !== null && subtreeIds(projects, project.id).has(target)) return "One of its own folders";
-  if (!canMoveTo(projects, project.id, target)) return "Too deep: 4 levels at most";
+/** Why a project cannot move under a target (null when it can), in the words the picker shows (classic's English). */
+export function moveBlock(projects: readonly ClientFolder[], project: ClientFolder, target: string | null, lang: Lang = "en"): string | null {
+  const { t } = wordsIn(lang);
+  if (target === (project.parent_id ?? null)) return t("It is here now");
+  if (target === project.id) return t("This project");
+  if (target !== null && subtreeIds(projects, project.id).has(target)) return t("One of its own folders");
+  if (!canMoveTo(projects, project.id, target)) return t("Too deep: 4 levels at most");
   return null;
 }
 
-/** Moves a project into another one or to the top level. */
-export function MoveProjectDialog({ project, projects, onMove, onClose }: {
+/** Moves a project into another one or to the top level. In English, or the window's language on the new path (`lang`). */
+export function MoveProjectDialog({ project, projects, onMove, onClose, lang = "en" }: {
   project: ClientFolder;
   projects: readonly ClientFolder[];
   onMove: (parentId: string | null) => Promise<boolean>;
   onClose: () => void;
+  lang?: Lang;
 }) {
+  const { t } = wordsIn(lang);
   const [target, setTarget] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const move = async () => {
@@ -160,13 +177,14 @@ export function MoveProjectDialog({ project, projects, onMove, onClose }: {
     if (!(await onMove(target))) setBusy(false);
   };
   return (
-    <Sheet title={`Move ${project.name}`} onClose={onClose} busy={busy}>
-      <p className="small muted">Its recordings, files and folders move with it.</p>
-      <ProjectPicker projects={projects} top={{ label: "Top level", inbox: false }} value={target} onChange={setTarget} label="Move to" blocked={(id) => moveBlock(projects, project, id)} />
+    <Sheet title={t("Move :name", { name: project.name })} onClose={onClose} busy={busy}>
+      <p className="small muted">{t("Its recordings, files and folders move with it.")}</p>
+      <ProjectPicker projects={projects} top={{ label: t("Top level"), inbox: false }} value={target} onChange={setTarget} label={t("Move to")}
+        blocked={(id) => moveBlock(projects, project, id, lang)} lang={lang} />
       <div className="row sheet-actions">
         <span className="spacer" />
-        <button type="button" className="btn ghost" disabled={busy} onClick={onClose}>Cancel</button>
-        <button type="button" className="btn primary" disabled={busy || target === undefined} onClick={() => void move()}>Move</button>
+        <button type="button" className="btn ghost" disabled={busy} onClick={onClose}>{t("Cancel")}</button>
+        <button type="button" className="btn primary" disabled={busy || target === undefined} onClick={() => void move()}>{t("Move")}</button>
       </div>
     </Sheet>
   );
@@ -198,7 +216,8 @@ export function MoveRecordingsDialog({ ids, title = null, current, projects, not
     setBusy(true);
     try {
       await moveRecordings(ids, projectId);
-      notify(movedText(count, title, list, projectId), false, projectId ? { kind: "project", id: projectId } : { kind: "library", folder: "inbox" });
+      // The classic Library's dialog (LibraryView, LibraryOrganise): its notice in its English, in an Urdu window too.
+      notify(movedText(count, title, list, projectId, "en"), false, projectId ? { kind: "project", id: projectId } : { kind: "library", folder: "inbox" });
       onMoved?.(projectId);
       onClose();
     } catch (e) {
@@ -243,7 +262,7 @@ export function MoveRecordingsDialog({ ids, title = null, current, projects, not
 }
 
 /** Deletes a project after saying what happens to what is in it: nothing in it is lost. */
-export function DeleteProjectDialog({ project, recordings, folders, parentName, onDelete, onClose }: {
+export function DeleteProjectDialog({ project, recordings, folders, parentName, onDelete, onClose, lang = "en" }: {
   project: ClientFolder;
   /** Recordings directly in it (they go to the Inbox). */
   recordings: number;
@@ -253,21 +272,28 @@ export function DeleteProjectDialog({ project, recordings, folders, parentName, 
   parentName: string | null;
   onDelete: () => Promise<boolean>;
   onClose: () => void;
+  /** Classic's English, or the window's language on the new path (D-263). */
+  lang?: Lang;
 }) {
+  const { t, tc } = wordsIn(lang);
   const [busy, setBusy] = useState(false);
   const remove = async () => {
     setBusy(true);
     if (!(await onDelete())) setBusy(false);
   };
   return (
-    <Sheet title={`Delete ${project.name}?`} onClose={onClose} busy={busy}>
-      <p>{recordings > 0 ? `Its ${recordings === 1 ? "recording goes" : `${recordings} recordings go`} to the Inbox, so nothing is lost.` : "Its recordings go to the Inbox, so nothing is lost."}</p>
-      {folders > 0 && <p>{`${folders === 1 ? "Its folder moves" : `Its ${folders} folders move`} up to ${parentName ?? "the top level"}, with ${folders === 1 ? "its" : "their"} recordings.`}</p>}
-      <p className="small muted">Its files, brief, notes, memory and filing rules are deleted with it.</p>
+    <Sheet title={t("Delete :name?", { name: project.name })} onClose={onClose} busy={busy}>
+      <p>{recordings > 0
+        ? tc("Its recording goes to the Inbox, so nothing is lost.|Its :count recordings go to the Inbox, so nothing is lost.", recordings)
+        : t("Its recordings go to the Inbox, so nothing is lost.")}</p>
+      {folders > 0 && <p>{parentName
+        ? tc("Its folder moves up to :parent, with its recordings.|Its :count folders move up to :parent, with their recordings.", folders, { parent: parentName })
+        : tc("Its folder moves up to the top level, with its recordings.|Its :count folders move up to the top level, with their recordings.", folders)}</p>}
+      <p className="small muted">{t("Its files, brief, notes, memory and filing rules are deleted with it.")}</p>
       <div className="row sheet-actions">
         <span className="spacer" />
-        <button type="button" className="btn ghost" disabled={busy} onClick={onClose}>Cancel</button>
-        <button type="button" className="btn danger solid" disabled={busy} onClick={() => void remove()}>{busy ? "Deleting…" : "Delete project"}</button>
+        <button type="button" className="btn ghost" disabled={busy} onClick={onClose}>{t("Cancel")}</button>
+        <button type="button" className="btn danger solid" disabled={busy} onClick={() => void remove()}>{busy ? t("Deleting…") : t("Delete project")}</button>
       </div>
     </Sheet>
   );

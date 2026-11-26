@@ -169,21 +169,41 @@ describe("the status line in Urdu", () => {
     expect(shellStatus({ recording: {}, elapsedMs: 134_000 }, "en").text).toBe("Recording 02:14");
   });
 
-  it("Home's and Live's Record strip stay in one language, English beside their English buttons, until those pages are converted", async () => {
-    await urdu();
-    const home = render(<HomeV2 status={makeStatus({ platform: "macos", callsReady: false })} onRecord={vi.fn()} onStop={vi.fn()} onSetup={vi.fn()}
-      onReadyCheck={vi.fn()} onOpenRecording={vi.fn()} onLibrary={vi.fn()} onAction={vi.fn()} onPlan={vi.fn()} />);
+  it("Home's and Live's Record strip are in one language with their buttons: all Urdu in an Urdu window, all English in English", async () => {
+    const home = () => <HomeV2 status={makeStatus({ platform: "macos", callsReady: false })} onRecord={vi.fn()} onStop={vi.fn()} onSetup={vi.fn()}
+      onReadyCheck={vi.fn()} onOpenRecording={vi.fn()} onLibrary={vi.fn()} onAction={vi.fn()} onPlan={vi.fn()} />;
+    const live = () => <LiveV2 status={makeStatus({ callsReady: true })} assistOn={false} projects={[]} onRecord={vi.fn()} onVoiceNote={vi.fn()} onCaptions={vi.fn()}
+      onSettings={vi.fn()} run={(fn) => fn()} />;
+    // English: the strip and its buttons in English, nothing in Urdu.
+    let view = render(home());
     await act(flushAsync);
-    const strip = screen.getByRole("region", { name: "Status" });
+    let strip = screen.getByRole("region", { name: "Status" });
     expect(strip).toHaveTextContent("Needs setup");
     expect(within(strip).getByRole("button", { name: "Fix setup" })).toBeInTheDocument();
-    home.unmount();
-    render(<LiveV2 status={makeStatus({ callsReady: true })} assistOn={false} projects={[]} onRecord={vi.fn()} onVoiceNote={vi.fn()} onCaptions={vi.fn()}
-      onSettings={vi.fn()} run={(fn) => fn()} />);
+    view.unmount();
+    view = render(live());
     await act(flushAsync);
-    const record = screen.getByRole("region", { name: "Record" });
+    let record = screen.getByRole("region", { name: "Record" });
     expect(record).toHaveTextContent("Ready to record");
+    expect(within(record).getByRole("button", { name: "Record" })).toBeInTheDocument();
     expect(record.textContent).not.toMatch(/[\u0600-\u06FF]/);
+    view.unmount();
+    // Urdu: the strip and its buttons in Urdu, no English left in them.
+    await urdu();
+    view = render(home());
+    await act(flushAsync);
+    strip = screen.getByRole("region", { name: "حالت" });
+    expect(strip).toHaveTextContent("سیٹ اپ باقی ہے");
+    expect(within(strip).getByRole("button", { name: "سیٹ اپ ٹھیک کریں" })).toBeInTheDocument();
+    expect(latinIn(strip.textContent ?? "")).toBe(false);
+    view.unmount();
+    render(live());
+    await act(flushAsync);
+    record = screen.getByRole("region", { name: "ریکارڈ" });
+    expect(record).toHaveTextContent("ریکارڈ کے لیے تیار");
+    expect(within(record).getByRole("button", { name: "وائس نوٹ" })).toBeInTheDocument();
+    expect(within(record).getByRole("button", { name: "ریکارڈ کریں" })).toBeInTheDocument();
+    expect(latinIn(record.textContent ?? "")).toBe(false);
   });
 });
 

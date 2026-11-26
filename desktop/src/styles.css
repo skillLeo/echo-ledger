@@ -1254,7 +1254,8 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .sheet .column { display: grid; gap: var(--space-2); }
 .project-picker { display: grid; gap: var(--space-2); }
 .pick-list { display: grid; gap: 1px; max-height: 300px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-field); padding: var(--space-1); }
-.pick-row { display: flex; align-items: center; gap: var(--space-2); min-height: 36px; min-width: 0; padding: 0 var(--space-2) 0 calc(var(--space-2) + var(--depth, 0) * 18px); border-radius: var(--radius-sm); cursor: pointer; }
+/* A row's depth indents it from the window's start edge (right to left in Urdu, as its folder and radio). */
+.pick-row { display: flex; align-items: center; gap: var(--space-2); min-height: 36px; min-width: 0; padding-block: 0; padding-inline: calc(var(--space-2) + var(--depth, 0) * 18px) var(--space-2); border-radius: var(--radius-sm); cursor: pointer; }
 .pick-row:hover { background: var(--surface-3); }
 .pick-row.chosen { background: var(--accent-soft); }
 .pick-row.blocked { cursor: default; color: var(--text-faint); }
@@ -1262,7 +1263,12 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .pick-row input { flex: none; margin: 0; }
 .pick-row svg { flex: none; color: var(--accent-text); }
 .pick-row.blocked svg { color: var(--text-faint); }
-.pick-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A name that reads left to right (dir="auto": an English project in an Urdu window) still lines up with its row, at the
+   window's start edge beside its folder and its radio (match-parent: WebKit reads only the prefixed value). */
+.pick-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: match-parent; text-align: -webkit-match-parent; }
+/* Urdu (D-263, as the new design's rows in D-262): the name clips its overflow and Nastaliq's ink rises above its line,
+   so in Urdu the clip box takes room on every side that its margins give back; the row's layout is unchanged. */
+:lang(ur) .pick-name { padding: var(--space-3) var(--space-2) var(--space-1); margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-2)) calc(-1 * var(--space-1)); }
 .pick-note { flex: none; font-size: var(--text-xs); color: var(--text-faint); }
 .btn.inline-link { height: auto; padding: 0 2px; vertical-align: baseline; font-size: inherit; }
 .shared-list { gap: var(--space-2); }

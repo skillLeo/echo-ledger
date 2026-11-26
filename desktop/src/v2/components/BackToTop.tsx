@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
 import { ArrowUpIcon } from "./icons";
+import { t } from "../../i18n";
 
 /** The box that scrolls `el` (the shell's content area): its nearest ancestor that scrolls up and down. */
 export function scrollRootOf(el: Element | null): HTMLElement | null {
@@ -61,7 +62,7 @@ export function BackToTop({ first = "[data-row-id]" }: BackToTopProps) {
   }, [scroller, toTop]);
   return (
     <div className="el-back-top" ref={ref} data-shown={shown ? "true" : "false"}>
-      <Button variant="secondary" icon={ArrowUpIcon} className="el-back-top__button" aria-label="Back to top" title="Back to top"
+      <Button variant="secondary" icon={ArrowUpIcon} className="el-back-top__button" aria-label={t("Back to top")} title={t("Back to top")}
         aria-keyshortcuts="Home Meta+ArrowUp Control+Home" aria-hidden={shown ? undefined : true} tabIndex={shown ? undefined : -1} onClick={toTop} />
     </div>
   );
