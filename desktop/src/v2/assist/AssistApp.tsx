@@ -7,8 +7,9 @@ import { useHitRegions } from "../../lib/hitRegions";
 import { useConcealed } from "../../lib/privacy";
 import { WindowShareBadge } from "../../components/ShareVisibility";
 import { announceReady } from "../../lib/ipc";
-import { language, setLanguage, t, useLanguage } from "../../i18n";
-import { KEPT_LANGUAGE_KEY, chosenLanguage, readKeptLanguage } from "../../i18n/language";
+import { t, useLanguage } from "../../i18n";
+// This window speaks the main window's language (i18n/language.ts' useKeptLanguage, as the Live Translate overlay).
+import { useKeptLanguage } from "../../i18n/language";
 import { useUiFlags } from "../flags";
 import { assist, failureText, type AssistMessage, type AssistMode, type HintLevel, type SendKind } from "./adapter";
 import { AssistCard, CONSENT_LINE } from "./AssistCard";
@@ -35,26 +36,6 @@ export function reduce(state: CardState, a: Action): CardState {
     case "session_active_dismissed": return { ...state, sessionActive: null, pendingStart: null };
     default: return cardReducer(state, a);
   }
-}
-
-/**
- * The language the main window keeps on this computer for the account (i18n/language.ts: whether Urdu is on, in the new
- * design, and the account's language), as this window's; again whenever the main window changes it.
- */
-export function useKeptLanguage() {
-  useEffect(() => {
-    const follow = () => {
-      const kept = readKeptLanguage();
-      const want = chosenLanguage({ on: kept.on, signedIn: true, account: undefined, kept: kept.account });
-      if (language() !== want) void setLanguage(want);
-    };
-    follow();
-    const changed = (e: StorageEvent) => {
-      if (e.key === null || e.key === KEPT_LANGUAGE_KEY) follow();
-    };
-    window.addEventListener("storage", changed);
-    return () => window.removeEventListener("storage", changed);
-  }, []);
 }
 
 export function useAssistCard(fixture: boolean): [CardState, (a: Action) => void, { hint: HintLevel; setHint: (h: HintLevel) => void; mutedUntil: number; setMutedUntil: (t: number) => void }] {
