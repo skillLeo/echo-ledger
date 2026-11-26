@@ -1568,7 +1568,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         </button>
                       </span>
                     )}
-                    {current.transcript?.final_status && <LockedChip feature="premium_engines" label="Premium engines" />}
+                    {current.transcript?.final_status && <LockedChip feature="premium_engines" label="Premium engines" lang="en" />}
                     {alternateId && (
                       <span className="segmented" role="group" aria-label="Version">
                         <button type="button" aria-pressed={version === "final"} onClick={() => setVersion("final")}>Current</button>
@@ -1642,8 +1642,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         {/* The views are a paid feature since v1.6: their badge where the switch would be. */}
                         {transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0 && !readOnly && (
                           <>
-                            <LockedChip feature="views" label="Roman Urdu · English · اردو" />
-                            <LockedChip feature="double_check" label="Double-check" />
+                            <LockedChip feature="views" label="Roman Urdu · English · اردو" lang="en" />
+                            <LockedChip feature="double_check" label="Double-check" lang="en" />
                           </>
                         )}
                       </div>
@@ -1661,8 +1661,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                           </button>
                         )}
                         {/* Paid parts of a recording the plan leaves out (v1.6.2): in view with their badge. */}
-                        {!readOnly && !screens?.length && <LockedChip feature="screen_moments" label="Screens" />}
-                        {!readOnly && <LockedChip feature="connector" label="Ask an AI assistant" />}
+                        {!readOnly && !screens?.length && <LockedChip feature="screen_moments" label="Screens" lang="en" />}
+                        {!readOnly && <LockedChip feature="connector" label="Ask an AI assistant" lang="en" />}
                       </div>
                       {galleryOpen && !!screens?.length && <ScreenGallery screens={screens} onOpen={openScreen} onClose={() => setGalleryOpen(false)} />}
                       {/* The converting line says it while the view is written or could not be (U19): no second caption then. */}
@@ -1777,7 +1777,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       {screenOpen !== null && screens?.[screenOpen] && (
         <ScreenViewer screens={screens} index={screenOpen} onIndex={setScreenOpen} onClose={() => setScreenOpen(null)} onExpired={reloadScreens}
           onPlay={playbackUrl ? (s) => { setScreenOpen(null); seek(s.at_ms); } : undefined}
-          onDelete={(s) => void deleteScreen(s)} />
+          onDelete={(s) => void deleteScreen(s)} lang="en" />
       )}
       {whatsFor && current?.id === whatsFor && !readOnly && (
         <WhatsAppSheet sessionId={current.id} title={current.title ?? null} hasAudio={!!playbackUrl} notify={notify} onClose={() => setWhatsFor(null)}

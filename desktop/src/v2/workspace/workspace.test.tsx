@@ -502,6 +502,31 @@ describe("the app's project page with ui_v2.ask keeps today's actions", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     expect(await screen.findByRole("dialog", { name: "Rename Qureshi Textiles" })).toBeInTheDocument();
   });
+
+  it("a project's Files tab keeps classic's Keep screen moments switch: the project's screens setting reaches the page", async () => {
+    respond("app_status", makeStatus());
+    respond("library_refresh", ITEMS);
+    respond("library_list", ITEMS);
+    respond("get_settings", makeSettings());
+    respond("list_clients", { data: [{ ...PROJECTS[0], screens: true }, PROJECTS[1]] });
+    respond("mic_users", []);
+    respond("request_links", null);
+    respond("client_workspace", { data: WS });
+    respond("client_rules", { data: [] });
+    respond("client_screens", { data: [], next_cursor: null });
+    respond("ui_flags", { ui_flags: { "ui_v2.shell": true, "ui_v2.ask": true }, ui_classic: false });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    fireEvent.click(within(await screen.findByRole("navigation", { name: "Main" })).getByRole("button", { name: "Projects" }));
+    await act(flushAsync);
+    fireEvent.click((await screen.findAllByRole("button", { name: /^Qureshi Textiles/ }))[0]);
+    await act(flushAsync);
+    fireEvent.click(await screen.findByRole("tab", { name: /^Files/ }));
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(await screen.findByRole("switch", { name: "Keep screen moments" })).toHaveAttribute("aria-checked", "true");
+  });
 });
 
 describe("the project's header (parity DT-PRJ-006)", () => {

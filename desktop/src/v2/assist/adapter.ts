@@ -25,8 +25,9 @@
 //   assist_shown { suggestionId, renderMs }               → void            the first text of a suggestion was drawn
 //   A start refused because another session runs comes as an `assist:message` of type `session_active`, or as
 //   assist_start's rejection carrying the same fields with `code: "session_active"`.
-import { api } from "../../lib/ipc";
+import { api, errorMessage } from "../../lib/ipc";
 import { listen } from "@tauri-apps/api/event";
+import { wordsIn, type Lang } from "../../i18n";
 
 export type MeetingType = "interview" | "boss" | "existing_client" | "new_client" | "general";
 export type HintLevel = "keywords" | "outline" | "full";
@@ -92,6 +93,21 @@ export function activeSessionId(snapshot: { messages: { type: string; session_id
 
 /** When the running session is not on this computer: it is ended where it runs. */
 export const NOT_HERE = "The other session runs on another device. End it there, then start this one.";
+
+/**
+ * A refusal's sentence on the prep and the card: the core's own as it comes; this app's own (NOT_HERE) in the window's
+ * language, or in `lang` (classic's English prep).
+ */
+export function failureText(e: unknown, lang?: Lang): string {
+  const said = errorMessage(e);
+  return said === NOT_HERE ? wordsIn(lang).t(NOT_HERE) : said;
+}
+
+/**
+ * The consent line of the prompt pack (1.0.1), for boss, client and general meetings: the person says it to the other
+ * side, so it is English in every language, as on the phone (its values-ur keeps it English, P-093).
+ */
+export const CONSENT_LINE = "Just so you know: I record this call and use an AI assistant that takes notes and suggests points to me. Is that okay with you?";
 
 /** The core's commands (lib/ipc.ts), typed for the card and the prep. */
 export const assist = {

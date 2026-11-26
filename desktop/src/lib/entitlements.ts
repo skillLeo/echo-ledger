@@ -4,6 +4,7 @@
 // what its plan leaves out).
 import { useSyncExternalStore } from "react";
 import { api, type Entitlements, type OfferedPlan, type PaymentStage, type PromoCheck, type UpgradeRequest } from "./ipc";
+import { wordsIn, type Lang } from "../i18n";
 
 /** undefined: not read yet; null: an older server (or signed out). */
 let current: Entitlements | null | undefined = undefined;
@@ -133,17 +134,23 @@ export function lockedBadge(e: Entitlements | null | undefined, feature: string)
   return { text: plan ? badgeText(plan) : "Paid", color: null, plan: plan ? planName(plan) : null };
 }
 
-/** A feature's name and what it does: the server's words, else the app's. */
 /** Features whose server names still name vendors (D-129, server side): the app says its own words for them on every
  * chip, badge (tooltip and label) and upgrade sheet until the server's names are plain (D-044). */
 export const OWN_WORDS_ONLY: ReadonlySet<string> = new Set(["connector", "premium_engines"]);
 
-export function featureWords(e: Entitlements | null | undefined, feature: string): { name: string; description: string } {
+/**
+ * A feature's name and what it does: the server's words, else the app's, in `lang` (the window's by default; classic's
+ * screens pass "en") where the catalogue has them, as the web's __() says the server's English names ("Live Translate"
+ * is لائیو ترجمہ); words the catalogue doesn't know stay as written.
+ */
+export function featureWords(e: Entitlements | null | undefined, feature: string, lang?: Lang): { name: string; description: string } {
+  const { t } = wordsIn(lang);
   const known = PAID_FEATURES.find(([key]) => key === feature);
   const fromServer = OWN_WORDS_ONLY.has(feature) ? undefined : e?.features[feature];
+  const description = fromServer?.description?.trim() || known?.[2] || "";
   return {
-    name: fromServer?.name?.trim() || known?.[1] || titleCase(feature.replace(/_/g, " ")),
-    description: fromServer?.description?.trim() || known?.[2] || "",
+    name: t(fromServer?.name?.trim() || known?.[1] || titleCase(feature.replace(/_/g, " "))),
+    description: description && t(description),
   };
 }
 

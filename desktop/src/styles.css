@@ -1111,6 +1111,9 @@ audio.player { display: none; }
 .translate-hidden.box { top: 6px; }
 .translate-hidden.subtitles { bottom: 6px; }
 .translate-done { position: absolute; top: 6px; right: 8px; font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, 0.9); color: #1c2024; cursor: pointer; }
+/* Urdu (D-264): the overlay's own words (the hidden pill, Done) in Nastaliq at Urdu's smallest size, not the sans face the
+   overlay keeps for its translations (a translation's own language decides its letters). */
+:lang(ur) :is(.translate-hidden, .translate-done) { font-family: "Noto Nastaliq Urdu", var(--font-sans); font-size: var(--el-text-urdu-caption-size, 14px); line-height: var(--el-text-urdu-caption-line, 28px); }
 @keyframes translate-pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .translate-dots { animation: none; } }
 .translate-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 8px 0; }
