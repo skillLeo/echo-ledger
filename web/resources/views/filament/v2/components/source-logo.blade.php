@@ -23,7 +23,6 @@
         'microsoft_teams' => '<rect width="24" height="24" rx="6" fill="#5059C9"/><circle cx="17.2" cy="7.6" r="2.1" fill="#7B83EB" /> <path d="M14.6 10.6h5c.5 0 .9.4.9.9v3.9a2.7 2.7 0 0 1-5.4.2z" fill="#7B83EB" /> <rect x="3.5" y="6.5" width="11" height="11" rx="1.5" fill="#4B53BC" /> <path d="M6.2 9.2h5.6v1.5H9.8v5h-1.6v-5h-2z" fill="#FFFFFF" />',
         'slack' => '<rect width="24" height="24" rx="6" fill="#FFFFFF"/><rect x="0.5" y="0.5" width="23" height="23" rx="5.5" fill="none" stroke="#DADCE0" /> <rect x="8.4" y="4.5" width="2.6" height="9" rx="1.3" fill="#36C5F0" /> <rect x="10.5" y="8.4" width="9" height="2.6" rx="1.3" fill="#2EB67D" /> <rect x="13" y="10.5" width="2.6" height="9" rx="1.3" fill="#ECB22E" /> <rect x="4.5" y="13" width="9" height="2.6" rx="1.3" fill="#E01E5A" />',
         'telegram' => '<circle cx="12" cy="12" r="12" fill="#26A5E4"/><path d="m5.4 11.6 11.7-4.5c.5-.2 1 .1.8.9l-2 9.4c-.1.7-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.6-.6.2-1z" fill="#FFFFFF" />',
-        'voice_note' => '<circle cx="12" cy="12" r="12" fill="#5F6B73"/><rect x="9.5" y="5" width="5" height="9" rx="2.5" fill="#FFFFFF" /> <path d="M7.2 11.5a4.8 4.8 0 0 0 9.6 0M12 16.4v2.6" fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" />',
     ];
     $app = $app ?? null;
     $mark = is_string($app) && array_key_exists($app, $marks) ? $marks[$app] : null;

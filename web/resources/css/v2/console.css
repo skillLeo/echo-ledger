@@ -2272,14 +2272,13 @@ html[dir='rtl'] .v2-row-title {
  * marks (.v2-row-marks: unread · pin · important · label dots) and the time over the length in the row's own face.
  */
 .v2-library .v2-lib-row {
-    min-height: var(--el-component-list-row-height);
     padding-block: var(--el-space-12);
     gap: var(--el-space-16);
     border-radius: var(--el-radius-md);
 }
 
 .v2-library .fi-ta-record:hover .v2-lib-row,
-.v2-library .fi-ta-record:focus-within .v2-lib-row {
+.v2-library .fi-ta-record:has(:focus-visible) .v2-lib-row {
     background-color: var(--el-role-bg-subtle);
 }
 
@@ -2314,8 +2313,10 @@ html[dir='rtl'] .v2-row-title {
     height: var(--el-icon-sm);
 }
 
-/* The time and the length: one size, one face (not mono), figures that line up, left to right in every language. The
-   face is the row's: the sans token, or Urdu's when the page is in Urdu. */
+/* The time and the length: one size, one face (not mono), figures that line up, each set apart from the words around
+   it. The length ("12:22") reads left to right in every language; the time keeps its own words' direction, since in
+   Urdu it holds a translated month ("5 نومبر"). The face is the row's: the sans token, or Urdu's on an Urdu page, with
+   Urdu's taller line so Nastaliq isn't clipped. */
 .v2-library .v2-row-value time,
 .v2-library .v2-row-length {
     font-family: var(--el-font-family-sans);
@@ -2323,17 +2324,21 @@ html[dir='rtl'] .v2-row-title {
     line-height: var(--el-text-caption-line);
     color: var(--el-role-text-secondary);
     font-variant-numeric: tabular-nums;
-    direction: ltr;
     unicode-bidi: isolate;
+}
+
+.v2-library .v2-row-length {
+    direction: ltr;
 }
 
 html[lang='ur'] .v2-library .v2-row-value time,
 html[lang='ur'] .v2-library .v2-row-length {
     font-family: var(--el-font-family-urdu);
+    line-height: var(--el-text-urdu-caption-line);
 }
 
 /* The source mark's device badge: a ring in the row's colour keeps it off the mark's edge (D12 "The marks"). */
-.v2-source-device {
+.v2-library .v2-source-device {
     inset-block-end: calc(-1 * var(--el-space-4));
     inset-inline-end: calc(-1 * var(--el-space-4));
     border: var(--el-border-strong) solid var(--el-role-bg-canvas);
@@ -2399,11 +2404,7 @@ html[lang='ur'] .v2-library .v2-row-length {
 }
 
 /* The player bar's moment ticks (bookmarks, pauses) stay 6 px to see, with a larger invisible area to press: about
-   22 px with a mouse and 38 px on touch. */
-.fi-body .el-player .el-tick {
-    position: relative;
-}
-
+   22 px with a mouse and 38 px on touch. The tick is placed absolutely by the player, so it holds its ::after. */
 .fi-body .el-player .el-tick::after {
     content: '';
     position: absolute;
