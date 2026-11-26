@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { Button, Icon, type IconType } from "./Button";
 import { CloseIcon } from "./icons";
+import { t } from "../../i18n";
 
 /** A message at the top of a page that stays until it is answered or closed: one sentence, at most one action. */
-export function Banner({ icon, children, action, onClose, closeLabel = "Close", tone = "info", testId }: {
+export function Banner({ icon, children, action, onClose, closeLabel = t("Close"), tone = "info", testId }: {
   icon?: IconType;
   children: ReactNode;
   action?: ReactNode;

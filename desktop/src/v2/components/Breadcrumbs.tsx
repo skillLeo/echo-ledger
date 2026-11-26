@@ -2,10 +2,11 @@
 // page. The chevrons point the reading way, so they turn in right-to-left.
 import { Icon } from "./Button";
 import { ChevronEndIcon } from "./icons";
+import { t } from "../../i18n";
 
 export type Crumb = { label: string; onOpen?: () => void };
 
-export function Breadcrumbs({ crumbs, label = "Breadcrumbs" }: { crumbs: readonly Crumb[]; label?: string }) {
+export function Breadcrumbs({ crumbs, label = t("Breadcrumbs") }: { crumbs: readonly Crumb[]; label?: string }) {
   if (crumbs.length < 2) return null;
   return (
     <nav className="el-crumbs" aria-label={label}>
