@@ -2514,7 +2514,8 @@ html[lang='ur'] .v2-library .v2-row-length {
     height: calc(var(--el-text-urdu-caption-line) + var(--el-space-8));
 }
 
-/* The eight label colours as one radio group: 32 px dots in 44 px targets, the chosen one ringed and ticked. */
+/* The eight label colours as one radio group: 32 px dots in 44 px targets, the chosen one ringed and ticked. The ring
+   is an outline with a gap, and the focus ring goes round the whole target, so a chosen dot that has focus shows both. */
 .v2-colour-picker {
     display: flex;
     flex-wrap: wrap;
@@ -2543,12 +2544,13 @@ html[lang='ur'] .v2-library .v2-row-length {
 }
 
 .v2-colour-picker input:checked + .v2-label-dot {
-    box-shadow: 0 0 0 var(--el-border-strong) var(--el-role-bg-surface), 0 0 0 calc(var(--el-border-strong) * 2) var(--el-role-text-primary);
+    outline: var(--el-border-strong) solid var(--el-role-text-primary);
+    outline-offset: var(--el-border-strong);
 }
 
-.v2-colour-picker input:focus-visible + .v2-label-dot {
+.v2-colour-picker label:has(input:focus-visible) {
+    border-radius: var(--el-radius-full);
     outline: var(--el-focus-width) solid var(--el-role-accent-focus);
-    outline-offset: calc(var(--el-focus-offset) * 2);
 }
 
 /* ================================================================== 4b. the Library's filters and views (2.0.0-p)
