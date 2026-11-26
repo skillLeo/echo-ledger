@@ -2385,7 +2385,7 @@
   "Muted for 60 s": "60 سیکنڈ کے لیے خاموش",
   "Mute 60 s": "60 سیکنڈ خاموش کریں",
   "Assist time left": "اسسٹ کا باقی وقت",
-  ":count minutes of assist left this month": "اس مہینے اسسٹ کے :count منٹ باقی ہیں",
+  ":count minute of assist left this month|:count minutes of assist left this month": "اس مہینے اسسٹ کا :count منٹ باقی ہے|اس مہینے اسسٹ کے :count منٹ باقی ہیں",
   "Say next": "اگلا کہیں",
   "Writing a suggestion": "تجویز لکھی جا رہی ہے",
   "No reply needed": "جواب کی ضرورت نہیں",

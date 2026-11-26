@@ -5,11 +5,11 @@
 // side, English in every language; names, projects' and files' names and what the core says are shown as they are.
 import { useEffect, useRef, useState } from "react";
 import { api, type ClientFile } from "../../lib/ipc";
-import { isRtl, lineDir, useLanguage, wordsIn, type Lang } from "../../i18n";
+import { LANGS, isRtl, lineDir, useLanguage, wordsIn, type Lang } from "../../i18n";
 import { Badge, Button, Card, Checkbox, EmptyState, Icons, Loading, Segmented, Select, Skeleton, TextArea, TextField } from "../components";
 import { assist, failureText, type AssistMode, type HintLevel, type LanguageHelp, type MeetingType, type Prep, type PrepDraft } from "./adapter";
 import { CONSENT_LINE, interviewNote } from "./AssistCard";
-import { errorWords, isSessionActive, sessionActiveOf } from "./card";
+import { errorWords, isSessionActive, sessionActiveOf, sessionActiveWords } from "./card";
 import type { SessionActive } from "./adapter";
 
 /** The kinds of meeting and their names in `lang` (the window's when left out, "en" on classic's English page). */
@@ -59,14 +59,16 @@ export function newDraft(type: MeetingType = "interview", lang?: Lang): PrepDraf
  */
 export function withType(draft: PrepDraft, type: MeetingType, lang?: Lang): PrepDraft {
   const said = templates(lang);
-  const from = [said[draft.meeting_type], TEMPLATES[draft.meeting_type]];
+  // A brief still holding a template, in any language the app speaks (written in Urdu, then the window set to English), is
+  // untouched: a new type brings its own template, in the window's language now.
+  const from = LANGS.map((l) => templates(l)[draft.meeting_type]);
   const to = said[type];
   const untouched = (key: "goals" | "to_discuss") => !draft[key] || from.some((f) => f[key] === draft[key]);
   return {
     ...draft, meeting_type: type,
     goals: untouched("goals") ? to.goals : draft.goals,
     to_discuss: untouched("to_discuss") ? to.to_discuss : draft.to_discuss,
-    hint_level: draft.hint_level === from[0].hint_level ? to.hint_level : draft.hint_level,
+    hint_level: draft.hint_level === said[draft.meeting_type].hint_level ? to.hint_level : draft.hint_level,
   };
 }
 
@@ -162,7 +164,7 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted, lang }: {
       onStarted();
     } catch (e) {
       if (!isSessionActive(e)) throw e;
-      setActiveFor({ prepId, running: sessionActiveOf(e, lang) });
+      setActiveFor({ prepId, running: sessionActiveOf(e) });
     }
   });
   const tooLong = (["goals", "done", "not_done", "to_discuss", "instructions"] as const).find((k) => draft[k].length > MAX);
@@ -263,7 +265,7 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted, lang }: {
       {error && <p className="el-field__error" role="alert" dir={dirOf(error)}>{error}</p>}
       {activeFor && (
         <div className="el-consent" role="alert">
-          <span dir={dirOf(activeFor.running.text)}>{activeFor.running.text}</span>
+          <span dir={dirOf(sessionActiveWords(activeFor.running, lang).text)}>{sessionActiveWords(activeFor.running, lang).text}</span>
           <span className="el-page__actions">
             <Button size="sm" variant="primary" loading={busy === "start"} loadingLabel={t("Starting…")}
               onClick={() => {
@@ -273,7 +275,7 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted, lang }: {
                   await assist.startReplacing(running.session_id, prepId, draft.mode);
                   onStarted();
                 });
-              }}>{activeFor.running.action}</Button>
+              }}>{sessionActiveWords(activeFor.running, lang).action}</Button>
             <Button size="sm" variant="quiet" onClick={() => { setActiveFor(null); void run("keep", () => assist.keepRunning()); }}>{t("Keep running")}</Button>
           </span>
         </div>

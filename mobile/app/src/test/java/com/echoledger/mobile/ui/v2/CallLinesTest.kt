@@ -86,6 +86,9 @@ class CallLinesTest : ScreenTest() {
 
     private fun notifications() = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications
 
+    /** What is posted, for a failure's words: each notification's channel and title. */
+    private fun posted() = notifications().map { "${it.channelId}: ${it.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)}" }
+
     private fun asked(id: String) {
         PostCallPrompt.show(
             app,
@@ -114,7 +117,7 @@ class CallLinesTest : ScreenTest() {
         DecisionPopup.transcribe(app)
         assertEquals("the choice closes the card at once", 0, overlayWindows())
         compose.onNodeWithText("Transcribing…").assertIsDisplayed()
-        assertTrue("no notification on top of it", notifications().isEmpty())
+        assertTrue("no notification on top of it: ${posted()}", notifications().isEmpty())
         pumpUntil("kept to be transcribed") { app.peekRecording("call-1")?.transcribe == true }
 
         compose.onNodeWithText("Undo").performClick()
@@ -136,7 +139,7 @@ class CallLinesTest : ScreenTest() {
         compose.onNodeWithText("Saved as audio").assertIsDisplayed()
         swipeAway("Saved as audio", left = true)
         assertEquals("no overlay window after the Undo flow", 0, overlayWindows())
-        assertTrue(notifications().isEmpty())
+        assertTrue("no notification after the Undo flow: ${posted()}", notifications().isEmpty())
     }
 
     @Test
