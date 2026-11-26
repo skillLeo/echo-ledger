@@ -2284,7 +2284,7 @@ html[dir='rtl'] .v2-row-title {
 }
 
 .v2-library .fi-ta-record + .fi-ta-record .v2-lib-row {
-    box-shadow: inset 0 var(--el-border-hairline) 0 var(--el-role-border-default);
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
 }
 
 .v2-library .v2-lib-row .v2-row-title {
@@ -2314,16 +2314,22 @@ html[dir='rtl'] .v2-row-title {
     height: var(--el-icon-sm);
 }
 
-/* The time and the length: one size, one face (not mono), figures that line up, left to right in every language. */
+/* The time and the length: one size, one face (not mono), figures that line up, left to right in every language. The
+   face is the row's: the sans token, or Urdu's when the page is in Urdu. */
 .v2-library .v2-row-value time,
 .v2-library .v2-row-length {
-    font-family: inherit;
+    font-family: var(--el-font-family-sans);
     font-size: var(--el-text-caption-size);
     line-height: var(--el-text-caption-line);
     color: var(--el-role-text-secondary);
     font-variant-numeric: tabular-nums;
     direction: ltr;
     unicode-bidi: isolate;
+}
+
+html[lang='ur'] .v2-library .v2-row-value time,
+html[lang='ur'] .v2-library .v2-row-length {
+    font-family: var(--el-font-family-urdu);
 }
 
 /* The source mark's device badge: a ring in the row's colour keeps it off the mark's edge (D12 "The marks"). */
