@@ -319,20 +319,27 @@ export function accelerator(shortcut: string): string {
   return shortcut.split("+").map((p) => (p === "Ctrl" ? "CmdOrCtrl" : KEY_NAMES[p] ?? p)).join("+");
 }
 
+/**
+ * Words for a menu the system draws (the menu bar, a Mac's right-click menu): its "&" written "&&". The core's menus
+ * (muda) take a single "&" for a mnemonic marker and drop it, so "Account & plan…" or a label named "R&D" would lose
+ * it; "&&" draws one "&". Only what goes to the core: the page's own menus show the words as they are.
+ */
+export const nativeWords = (words: string) => words.replace(/&/g, "&&");
+
 /** A menu made by menuItems() as a native menu's lines (native_menu.rs): a line apart becomes a separator before it. */
 export function nativeItems(items: readonly MenuItem[], title?: string, depth = 0): NativeMenuItem[] {
   // A title line (several chosen, UX-22), greyed, with a hairline under it.
-  const out: NativeMenuItem[] = title ? [{ action: null, label: title, enabled: false }, { action: null }] : [];
+  const out: NativeMenuItem[] = title ? [{ action: null, label: nativeWords(title), enabled: false }, { action: null }] : [];
   for (const i of items) {
     if (i.separator && out.length && out[out.length - 1].action !== null) out.push({ action: null });
     // A note, not a command ("Up to 200 at a time…"): greyed.
-    if (!i.action) out.push({ action: null, label: i.label, enabled: false });
+    if (!i.action) out.push({ action: null, label: nativeWords(i.label), enabled: false });
     // A sub-menu, one level deep (3b): its choices come back with their values.
     else if (i.items?.length) {
-      if (depth === 0) out.push({ action: i.action, label: i.label, enabled: !i.disabled, items: nativeItems(i.items, undefined, 1) });
+      if (depth === 0) out.push({ action: i.action, label: nativeWords(i.label), enabled: !i.disabled, items: nativeItems(i.items, undefined, 1) });
     } else {
       out.push({
-        action: i.action, label: i.label, accelerator: i.shortcut ? accelerator(i.shortcut) : null, enabled: !i.disabled, checked: i.checked ?? null,
+        action: i.action, label: nativeWords(i.label), accelerator: i.shortcut ? accelerator(i.shortcut) : null, enabled: !i.disabled, checked: i.checked ?? null,
         ...(i.choice !== undefined ? { value: i.choice } : {}),
       });
     }

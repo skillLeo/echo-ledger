@@ -34,8 +34,9 @@ describe("the Mac menu bar (FIX-05)", () => {
 
   it("the EchoLedger menu: About, Settings…, Account & Plan…, Check for Updates…, Services, Hide, Hide Others, Show All, Quit", () => {
     expect(labels(menu("EchoLedger").items)).toEqual([
-      "[about]", "—", "Settings…", "Account & Plan…", "Check for Updates…", "—", "[services]", "—", "[hide]", "[hideOthers]", "[showAll]", "—", "Quit EchoLedger",
+      "[about]", "—", "Settings…", "Account && Plan…", "Check for Updates…", "—", "[services]", "—", "[hide]", "[hideOthers]", "[showAll]", "—", "Quit EchoLedger",
     ]);
+    // The core draws "&&" as one "&" (a single one would be taken for a mnemonic marker and dropped).
     // Settings and Quit are our own (Quit keeps a running recording first), with their keys.
     expect(find(menu("EchoLedger").items, "app.quit")).toMatchObject({ kind: "item", accelerator: "CmdOrCtrl+Q", enabled: true });
     expect(find(menu("EchoLedger").items, "app.settings")).toMatchObject({ accelerator: "CmdOrCtrl+,", enabled: true });
@@ -59,7 +60,7 @@ describe("the Mac menu bar (FIX-05)", () => {
       "Back", "Forward", "—", "Library", "Projects", "Live", "Ask", "Activity", "—", "All Recordings", "Needs You", "Unread", "Audio Only", "Shared", "Trash", "My Views",
     ]);
     expect(labels(menu("Window").items)).toEqual(["[minimize]", "[maximize]", "—", "Show Recording Pill", "Show Captions Window", "Show Live Assist Card", "—", "[bringAllToFront]"]);
-    expect(labels(menu("Help").items)).toEqual(["EchoLedger Help", "—", "Keyboard Shortcuts", "What's New", "Getting Started Tour", "—", "Setup & Health…", "Report a Problem…"]);
+    expect(labels(menu("Help").items)).toEqual(["EchoLedger Help", "—", "Keyboard Shortcuts", "What's New", "Getting Started Tour", "—", "Setup && Health…", "Report a Problem…"]);
     expect(find(menu("File").items, "file.syncNow")).toMatchObject({ accelerator: "CmdOrCtrl+R" });
     expect(find(menu("File").items, "file.export")).toMatchObject({ accelerator: "Shift+CmdOrCtrl+E" });
   });

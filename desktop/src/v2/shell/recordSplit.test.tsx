@@ -108,7 +108,8 @@ describe("Record, a split button (DES-02)", () => {
       { action: "file.newVoiceNote", label: "New Voice Note", accelerator: "Shift+CmdOrCtrl+N", enabled: true, checked: null },
       { action: "file.importAudio", label: "Import Audio Files…", accelerator: "CmdOrCtrl+O", enabled: true, checked: null },
       { action: null },
-      { action: "live.autoRecord", label: "Auto-record Calls & Meetings", accelerator: null, enabled: true, checked: true },
+      // "&&" for the core, which draws it as one "&".
+      { action: "live.autoRecord", label: "Auto-record Calls && Meetings", accelerator: null, enabled: true, checked: true },
       { action: null },
       { action: "go.recordPage", label: "Record Page", accelerator: null, enabled: true, checked: null },
     ]);
