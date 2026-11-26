@@ -88,6 +88,9 @@ export {
   RequestFilesIcon,
 } from "../../components/Icons";
 export { PlayIcon, PauseIcon, StopIcon, ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";
+// A row's "important" mark in its indicator slot (D12): a flag, drawn in the warning colour; a row never names the
+// glyph, only ImportantIcon.
+export { LucideFlagIcon as ImportantIcon } from "../../components/Icons";
 // UX-07: the zoom's − beside PlusIcon (the avatar's row, the chip), and its glyph, a magnifier with +.
 export { LucideMinusIcon as MinusIcon, LucideZoomInIcon as ZoomIcon } from "../../components/Icons";
 
