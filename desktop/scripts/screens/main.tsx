@@ -131,7 +131,9 @@ const planParam = params.get("plan");
 // "controls-share-notchecked" (the floating windows' badge), "controls-translate-box" / "-subtitles" (Live Translate
 // with its badge), "controls-check-card" (the test card of the test with the phone), "library-share-notice-mac" (the
 // main window opened during a whole-screen share), "settings-share-bar-mac" (the windows off while the sharing bar is on
-// screen: no Show, and when they come back).
+// screen: no Show, and when they come back). D-264: "&translate=editing" is Live Translate unlocked to move it (Done),
+// "&translate=hidden" hidden (the pill); "controls-assist" is the Live Assist card's window (560 x 440) playing its
+// development session (with "&assistfixture=1").
 const share = screen.includes("share");
 const shareResult = screen.includes("-fail") ? "fail" : screen.includes("-error") ? "error" : "pass";
 /** A desktop as a capture would show it: a page, its text, the green control, and the test window where it leaked. */
@@ -374,8 +376,11 @@ const commands: Record<string, (args: Args) => unknown> = {
   library_refresh: () => (empty ? [] : LISTED),
   // `&noprojects=1`: an account with no project yet (UX-09: no Projects panel, one empty state on the page).
   // `&manyprojects=1`: 13 projects (the panel's search shows from 11); `&archived=1`: one of them archived (UX-09).
+  // `&projectscreens=1` (D-264): Northwind keeps its meetings' screens (its switch on, which classic's page shows), and
+  // its page lists the Weekly sync's three, with more to show.
   list_clients: () => ({ data: params.get("noprojects") === "1" ? [] : [
-    ...CLIENTS.map((c) => (params.get("archived") === "1" && c.id === "c-zed" ? { ...c, archived: true } : c)),
+    ...CLIENTS.map((c) => (params.get("archived") === "1" && c.id === "c-zed" ? { ...c, archived: true }
+      : params.get("projectscreens") === "1" && c.id === "c-north" ? { ...c, screens: true } : c)),
     ...(params.get("manyprojects") === "1" ? ["Bilal Traders", "Crescent Mills", "Dawood Exports", "Faisal Apparel", "Gulf Logistics", "Hamid & Sons", "Indus Cotton"]
       .map((name, i) => ({ id: `c-more-${i}`, name, session_count: 0, ai_notes: true, parent_id: null, path: [], children_count: 0, nested_session_count: 0 })) : []),
   ] }),
@@ -401,6 +406,11 @@ const commands: Record<string, (args: Args) => unknown> = {
     : TRANSCRIPTS[id as string] ?? { ...TRANSCRIPTS["t-r5"], id, suggestions: [], views: null }),
   transcript_views: () => VIEWS,
   session_screens: ({ id }) => ({ data: id === "r1" ? SCREENS_R1 : [] }),
+  client_screens: ({ id }) => {
+    if (params.get("projectscreens") !== "1") return null;
+    const r1 = ITEMS.find((i) => i.id === "r1")!;
+    return { data: id === "c-north" ? SCREENS_R1.map((s) => ({ ...s, session_id: r1.id, session_title: r1.title, session_started_at: r1.started_at })) : [], next_cursor: id === "c-north" ? "more" : null };
+  },
   screen_image: ({ url }) => screenPictureFor(String(url)),
   help_guides: ({ q }) => ({ data: q ? HELP_GUIDES.filter((g) => `${g.title} ${g.excerpt}`.toLowerCase().includes(String(q).toLowerCase())) : HELP_GUIDES }),
   help_guide: () => HELP_GUIDE,
@@ -467,7 +477,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   translate_status: () => params.get("translate") === "ended"
     ? { mode: "game", app: "Valorant", locked: true, hidden: false, status: "ended", notice: null, partial: "", original: "", text: "" }
     : screen.startsWith("controls-translate") ? {
-    mode: screen.endsWith("subtitles") ? "watch" : "game", app: "Valorant", locked: true, hidden: false, status: "live", notice: null, partial: "",
+    mode: screen.endsWith("subtitles") ? "watch" : "game", app: "Valorant", locked: params.get("translate") !== "editing", hidden: params.get("translate") === "hidden",
+    status: "live", notice: null, partial: "", hide_keys: mac ? "⌘⇧H" : "Ctrl+Shift+H", lock_keys: mac ? "⌘⇧T" : "Ctrl+Shift+T",
     original: screen.endsWith("subtitles") ? "" : "Necesitamos rotar al sitio B ahora mismo",
     text: screen.endsWith("subtitles") ? "We were never supposed to meet like this." : "We need to rotate to site B right now",
   } : null,
@@ -593,6 +604,14 @@ async function render() {
     document.documentElement.dataset.window = "translate";
     document.body.style.background = screen.endsWith("subtitles") ? "#20242b" : "#3b4250";
     root.render(<TranslateOverlayApp />);
+    return;
+  }
+  if (screen === "controls-assist") {
+    const { default: AssistApp } = await import("../../src/v2/assist/AssistApp");
+    // The card's window itself (the screenshot's viewport is its size, 560 x 440), over a call's picture.
+    document.documentElement.dataset.window = "assist";
+    document.body.style.background = "#3b4250";
+    root.render(<AssistApp />);
     return;
   }
   if (screen === "controls-check-card") {

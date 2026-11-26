@@ -70,7 +70,7 @@ export function LiveAssistClassic({ projects }: { projects: { id: string; name: 
   return (
     <div className="el-root el-embedded el-assist-classic" data-v2="live-assist">
       {prep
-        ? <PrepScreen prep={prep === "new" ? null : prep} projects={projects} onBack={() => setPrep(null)} onStarted={() => setPrep(null)} />
+        ? <PrepScreen prep={prep === "new" ? null : prep} projects={projects} onBack={() => setPrep(null)} onStarted={() => setPrep(null)} lang="en" />
         : <LiveAssistSection onPrep={setPrep} lang="en" />}
     </div>
   );

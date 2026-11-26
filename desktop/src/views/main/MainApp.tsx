@@ -1273,7 +1273,7 @@ export default function MainApp() {
           renderPage={ui.flags["ui_v2.ask"] ? (ctx) => (
             <Suspense fallback={null}>
               <div className="el-root el-embedded">
-                <WorkspaceV2 key={ctx.project.id} project={{ id: ctx.project.id, name: ctx.project.name, ai_notes: ctx.project.ai_notes }} parent={ctx.parent} folders={ctx.folders}
+                <WorkspaceV2 key={ctx.project.id} project={{ id: ctx.project.id, name: ctx.project.name, ai_notes: ctx.project.ai_notes, screens: ctx.project.screens }} parent={ctx.parent} folders={ctx.folders}
                   menu={ctx.menu} onShare={ctx.onShare ?? undefined} onSend={ctx.onSend ?? undefined} onRequest={ctx.onRequest ?? undefined}
                   startTab={projectTab?.id === ctx.project.id ? projectTab : null}
                   rules={ctx.rules} projects={ctx.projects} aiNotesInPlan={ctx.aiNotesInPlan}

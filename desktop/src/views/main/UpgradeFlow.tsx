@@ -194,7 +194,7 @@ function ChooseStep({ e, feature, plan, guard, onDirty, onMade }: {
   const full = chosenPlan?.price_pkr ?? null;
   const discounted = codeFits && promo?.final_price ? Number(promo.final_price.replace(/[^\d]/g, "")) : null;
   const free = codeFits && promo?.free;
-  const words = feature ? featureWords(e, feature) : null;
+  const words = feature ? featureWords(e, feature, "en") : null;
   const proToUltra = e.plan && e.plan.key !== "free" && e.plan.expires_at;
   const footer = (
     <div className="flow-actions">
@@ -281,7 +281,7 @@ function highlightsFor(e: Entitlements, p: OfferedPlan, below: OfferedPlan | nul
   const before = new Set(below?.features ?? Object.keys(e.features).filter((k) => !isLocked(e, k)));
   for (const key of p.features) {
     if (lines.length >= 5) break;
-    if (!before.has(key) && key !== "platform_transcription" && key !== "team") lines.push(featureWords(e, key).name);
+    if (!before.has(key) && key !== "platform_transcription" && key !== "team") lines.push(featureWords(e, key, "en").name);
   }
   return lines;
 }

@@ -100,8 +100,8 @@ export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, o
         items={[
           // Team workspaces (v1.6.2): a plan without them still shows Invite, with its badge, and opens the upgrade sheet.
           (teamLocked || here.role === "owner" || here.role === "admin") && {
-            id: "ws-invite", label: <>Invite people<BadgeMark feature="team" /></>, icon: <LucideUserPlusIcon size={16} />,
-            name: teamLocked ? `Invite people, ${featureWords(entitlements, "team").name} is in ${lowestPlan(entitlements, "team")?.name ?? "a paid plan"}` : "Invite people",
+            id: "ws-invite", label: <>Invite people<BadgeMark feature="team" lang="en" /></>, icon: <LucideUserPlusIcon size={16} />,
+            name: teamLocked ? `Invite people, ${featureWords(entitlements, "team", "en").name} is in ${lowestPlan(entitlements, "team")?.name ?? "a paid plan"}` : "Invite people",
             onPick: teamLocked ? () => openUpgradeSheet("team") : onWorkspaces,
           },
           // The header says where this computer works and the other workspaces; screen readers hear it with this row.
