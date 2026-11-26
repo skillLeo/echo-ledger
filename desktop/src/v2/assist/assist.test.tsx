@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { callsOf, emitEvent, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import type { AssistMessage } from "./adapter";
 import { FIXTURE_SESSION, fixtureStream } from "./fixture";
-import { EMPTY_CARD, cardReducer, errorWords, isSessionActive, modeNote, offerQuestion, parseSuggestion, shown, type CardState } from "./card";
+import { EMPTY_CARD, cardReducer, errorText, errorWords, isSessionActive, modeNote, offerQuestion, parseSuggestion, sessionActiveWords, shown, type CardState } from "./card";
 import { AssistCard, CONSENT_LINE, INTERVIEW_NOTE } from "./AssistCard";
 import AssistApp from "./AssistApp";
 
@@ -47,7 +47,9 @@ describe("the card's rules (1.9.0-f)", () => {
     const s = play([READY, start("s1"), token("s1", "Half"),
       { type: "error", code: "provider_error", message: "That suggestion didn't come through.", retry: true, suggestion_id: "s1", in_reply_to: null, fatal: false }]);
     expect(shown(s)).toMatchObject({ text: "", status: "failed" });
-    expect(s.error).toEqual({ text: "Something went wrong with Live Assist.", fatal: false, suggestionId: "s1", code: "provider_error" });
+    // The state keeps the code; the card words it when drawn.
+    expect(s.error).toEqual({ code: "provider_error", retry: true, fatal: false, suggestionId: "s1" });
+    expect(errorText(s.error!)).toBe("Something went wrong with Live Assist.");
   });
 
   it("mode_changed says why, in words; requested says nothing; captions only says captions go on", () => {
@@ -192,7 +194,8 @@ describe("contract 1.9.0-n on the card", () => {
   it("reads the new mode from `to`", () => {
     const s = play([READY, { type: "mode_changed", from: "balanced", to: "fast", reason: "budget" }]);
     expect(s.mode).toBe("fast");
-    expect(s.modeNote).toBe("Switched to Fast to stay within your assist hours.");
+    expect(s.modeChange).toEqual({ mode: "fast", reason: "budget" });
+    expect(modeNote(s.modeChange!.mode, s.modeChange!.reason)).toBe("Switched to Fast to stay within your assist hours.");
   });
 
   it("a skip naming a suggestion ends it, without words", () => {
@@ -213,8 +216,8 @@ describe("contract 1.9.0-n on the card", () => {
   });
 
   it("budget_exhausted: off for this call when it won't retry, try again in a moment when it will", () => {
-    expect(play([READY, err("budget_exhausted", false)]).error!.text).toBe("Suggestions are off for this call.");
-    expect(play([READY, err("budget_exhausted", true)]).error!.text).toBe("Try again in a moment.");
+    expect(errorText(play([READY, err("budget_exhausted", false)]).error!)).toBe("Suggestions are off for this call.");
+    expect(errorText(play([READY, err("budget_exhausted", true)]).error!)).toBe("Try again in a moment.");
   });
 
   it("every code gets a plain sentence; bad_message says nothing; never the code itself", () => {
@@ -237,11 +240,13 @@ describe("contract 1.9.0-n on the card", () => {
   });
 
   it("session_active is recognised from an error message or a rejection", () => {
-    expect(play([READY, err("session_active", false)]).sessionActive).toEqual({
-      session_id: null, practice: false, text: "Another Live Assist session is running.", action: "End it and start this one",
-    });
+    // Without the core's own words the state keeps none; the app's are found when the card is drawn.
+    const plain = play([READY, err("session_active", false)]).sessionActive!;
+    expect(plain).toEqual({ session_id: null, practice: false, text: null, action: null });
+    expect(sessionActiveWords(plain)).toEqual({ text: "Another Live Assist session is running.", action: "End it and start this one" });
     const fromCore = play([{ type: "session_active", session_id: "as-0", practice: true, text: "Your practice session is still running.", action: "End practice and start" }]);
     expect(fromCore.sessionActive).toEqual({ session_id: "as-0", practice: true, text: "Your practice session is still running.", action: "End practice and start" });
+    expect(sessionActiveWords(fromCore.sessionActive!)).toEqual({ text: "Your practice session is still running.", action: "End practice and start" });
     expect(isSessionActive({ code: "session_active", message: "x" })).toBe(true);
     expect(isSessionActive("Another session: session_active")).toBe(true);
     expect(isSessionActive({ code: "budget_exhausted" })).toBe(false);
