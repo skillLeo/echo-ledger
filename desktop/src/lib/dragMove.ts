@@ -2,6 +2,7 @@
 // not the page's drag and drop: the window takes dropped files itself, and on Windows that switches the page's own drag
 // and drop off. A row starts a drag once the pointer has moved a few pixels with the button down; drop targets are the
 // elements carrying `data-drop-project` (a project's id, empty for the Inbox).
+import { wordsIn, type Lang } from "../i18n";
 
 /** How far the pointer moves before a press on a row becomes a drag. */
 export const DRAG_THRESHOLD_PX = 6;
@@ -22,9 +23,11 @@ export function dropTargetAt(x: number, y: number, doc: Document = document): { 
   return { element: target, projectId: value === "" ? null : value };
 }
 
-/** "Moving “Kick-off”", "Moving 3 recordings". */
-export function dragLabel(titles: readonly (string | null | undefined)[]): string {
-  return titles.length === 1 ? `Moving “${titles[0] || "recording"}”` : `Moving ${titles.length} recordings`;
+/** "Moving “Kick-off”", "Moving 3 recordings", in the window's language or `lang` (the classic pages pass "en"). */
+export function dragLabel(titles: readonly (string | null | undefined)[], lang?: Lang): string {
+  const { t, tc } = wordsIn(lang);
+  if (titles.length !== 1) return tc("Moving :count recording|Moving :count recordings", titles.length);
+  return titles[0] ? t("Moving “:title”", { title: titles[0] }) : t("Moving “recording”");
 }
 
 let endedAt = 0;

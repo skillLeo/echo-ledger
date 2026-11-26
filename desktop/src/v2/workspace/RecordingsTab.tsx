@@ -1,10 +1,11 @@
 // A project's Recordings tab in the new look, with everything today's has: search (titles, and what was said in its
 // transcripts), the sort, "Include its folders", its folders, dragging a recording onto another project in the
-// sidebar (moved there), and its filing rules.
+// sidebar (moved there), and its filing rules. Its words are the window's language (D-261); a recording's, a folder's
+// and a project's name is its own.
 import { RowMetaText } from "../library/RecordingRow";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, type ClientFolder, type LibraryItem, type SearchResult } from "../../lib/ipc";
-import { recordingName, searchItems, sortItems, type SortKey } from "../../lib/library";
+import { searchItems, sortItems, type SortKey } from "../../lib/library";
 import { projectRecordings } from "../../lib/projects";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { snippetParts } from "../../lib/player";
@@ -12,10 +13,19 @@ import { timestamp } from "../../lib/format";
 import { BackToTop, Button, Card, Checkbox, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, Select, SkeletonRow } from "../components";
 import { dayGroups, rowModel } from "../library/model";
 import { ScreensMark } from "../library/screens";
+import { lineDir, t, useLanguage } from "../../i18n";
 
+/** The sorts, their names in the window's language (read when shown). */
 export const PROJECT_SORTS: readonly { value: SortKey; label: string }[] = [
-  { value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }, { value: "title", label: "Name A–Z" }, { value: "longest", label: "Longest first" },
+  { value: "newest", get label() { return t("Newest first"); } }, { value: "oldest", get label() { return t("Oldest first"); } },
+  { value: "title", get label() { return t("Name A–Z"); } }, { value: "longest", get label() { return t("Longest first"); } },
 ];
+
+/** A found recording's name: its title, or the app's word for one with none (lib/library's recordingName, in the window's language). */
+const hitName = (title: string | null | undefined): string => title?.trim() || t("Recording");
+
+/** A line of the app's own words around a name, read in its own words' direction (dir="auto" in English, as before). */
+const Said = ({ children }: { children: string }) => <span dir={lineDir(children)}>{children}</span>;
 
 export function RecordingsTab({ project, projects, items, itemsFailed, folders, onRetry, onOpenRecording, onOpenProject, onMoveRecordings, onLibrary, rules }: {
   project: { id: string; name: string };
@@ -30,6 +40,7 @@ export function RecordingsTab({ project, projects, items, itemsFailed, folders, 
   onLibrary: () => void;
   rules?: ReactNode;
 }) {
+  useLanguage();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
   const [nested, setNested] = useState(false);
@@ -71,8 +82,8 @@ export function RecordingsTab({ project, projects, items, itemsFailed, folders, 
     <div className="el-workspace-tab el-back-top-room">
       {folders.length > 0 && (
         <Card className="el-workspace-folders">
-          <List label="Folders" className="el-group__rows">
-            <ListSection title="Folders" />
+          <List label={t("Folders")} className="el-group__rows">
+            <ListSection title={t("Folders")} />
             {folders.map((f) => (
               <ListRow key={f.id} compact iconStyle="plain" icon={Icons.FolderIcon} title={f.name} value={f.count ? String(f.count) : undefined} chevron
                 onClick={onOpenProject ? () => onOpenProject(f.id) : undefined} />
@@ -81,17 +92,17 @@ export function RecordingsTab({ project, projects, items, itemsFailed, folders, 
         </Card>
       )}
       <div className="el-workspace-tools">
-        <SearchField label={`Search ${project.name}`} value={query} onChange={setQuery} />
-        <Select label="Sort recordings" hideLabel value={sort} onChange={(v) => setSort(v as SortKey)} options={PROJECT_SORTS.map((s) => ({ value: s.value, label: s.label }))} className="el-workspace-sort" />
-        {folders.length > 0 && <Checkbox label="Include its folders" checked={nested} onChange={(e) => setNested(e.target.checked)} />}
+        <SearchField label={t("Search :name", { name: project.name })} clearLabel={t("Clear search")} value={query} onChange={setQuery} />
+        <Select label={t("Sort recordings")} hideLabel value={sort} onChange={(v) => setSort(v as SortKey)} options={PROJECT_SORTS.map((s) => ({ value: s.value, label: s.label }))} className="el-workspace-sort" />
+        {folders.length > 0 && <Checkbox label={t("Include its folders")} checked={nested} onChange={(e) => setNested(e.target.checked)} />}
       </div>
       {found.length > 0 && (
         <Card>
-          <List label="Matches in transcripts" className="el-group__rows">
-            <ListSection title="In transcripts" />
+          <List label={t("Matches in transcripts")} className="el-group__rows">
+            <ListSection title={t("In transcripts")} />
             {found.flatMap((r) => r.hits.slice(0, 3).map((h) => (
               <ListRow key={`${h.transcript_id}-${h.segment_index}`} compact iconStyle="plain" icon={Icons.PlayIcon}
-                title={recordingName(r.session.title)} label={`Play ${recordingName(r.session.title)} from ${timestamp(h.start_ms)}`}
+                title={hitName(r.session.title)} label={t("Play :name from :time", { name: hitName(r.session.title), time: timestamp(h.start_ms) })}
                 meta={<>{h.speaker}: {snippetParts(h.snippet, h.highlights).map((p, i) => (p.hit ? <mark key={i} className="el-mark">{p.text}</mark> : <span key={i}>{p.text}</span>))}</>}
                 value={timestamp(h.start_ms)} onClick={() => onOpenRecording(r.session.id, h.start_ms)} />
             )))}
@@ -99,22 +110,23 @@ export function RecordingsTab({ project, projects, items, itemsFailed, folders, 
         </Card>
       )}
       {itemsFailed && !items ? (
-        <EmptyState tone="error" icon={Icons.ErrorIcon} title="The recordings didn't load" body="EchoLedger couldn't read the library. Recordings on this computer are safe."
-          action={<Button onClick={onRetry}>Try again</Button>} />
+        <EmptyState tone="error" icon={Icons.ErrorIcon} title={t("The recordings didn't load")} body={<Said>{t("EchoLedger couldn't read the library. Recordings on this computer are safe.")}</Said>}
+          action={<Button onClick={onRetry}>{t("Try again")}</Button>} />
       ) : !shown ? (
-        <Loading label="Loading recordings">{Array.from({ length: 4 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
+        <Loading label={t("Loading recordings")}>{Array.from({ length: 4 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
       ) : all!.length === 0 ? (
-        <EmptyState icon={Icons.FolderIcon} title="No recordings in this project yet"
-          body={`Recordings filed under ${project.name} show up here. Drag recordings from the Library onto it in the sidebar, or use Move.`}
-          action={<Button onClick={onLibrary}>Open Library</Button>} />
+        <EmptyState icon={Icons.FolderIcon} title={t("No recordings in this project yet")}
+          body={<Said>{t("Recordings filed under :name show up here. Drag recordings from the Library onto it in the sidebar, or use Move.", { name: project.name })}</Said>}
+          action={<Button onClick={onLibrary}>{t("Open Library")}</Button>} />
       ) : shown.length === 0 ? (
-        <EmptyState icon={Icons.SearchIcon} title="No recordings match" body="Try another word, or clear the search." action={<Button onClick={() => setQuery("")}>Clear search</Button>} />
+        <EmptyState icon={Icons.SearchIcon} title={t("No recordings match")} body={t("Try another word, or clear the search.")} action={<Button onClick={() => setQuery("")}>{t("Clear search")}</Button>} />
       ) : sort === "newest" || sort === "oldest" ? (
-        <List label="Recordings">
-          {dayGroups(shown).map((g) => [<ListSection key={g.label} title={g.label} />, ...g.items.map(row)])}
+        <List label={t("Recordings")}>
+          {/* The day headings are the app's words (Today, Yesterday, This week, Earlier), said in the window's language. */}
+          {dayGroups(shown).map((g) => [<ListSection key={g.label} title={t(g.label)} />, ...g.items.map(row)])}
         </List>
       ) : (
-        <List label="Recordings">{shown.map(row)}</List>
+        <List label={t("Recordings")}>{shown.map(row)}</List>
       )}
       {rules}
       {(shown?.length ?? 0) > 0 && <BackToTop first=".el-row__hit" />}

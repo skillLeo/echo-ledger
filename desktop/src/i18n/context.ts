@@ -46,4 +46,11 @@ export const CONTEXT_EN: Readonly<Record<string, string>> = {
   // page (ریکارڈ کا صفحہ); and its and Live's Record button, the verb (ریکارڈ کریں), where the rail's Record is the place.
   "home_context.title": "Home",
   "home_context.record": "Record",
+  // A project's page (D-261): a memory line's kind Change is a change that was made (تبدیلی), not the verb (ur.json's
+  // "Change", بدلیں); a file's kind, Word (the format's name, as it is) and Text (a plain text file, ٹیکسٹ); and between
+  // the ways a person can open the project ("Sent to them …; Through a share link"): Urdu's semicolon (؛) in Urdu.
+  "workspace_context.memory_change": "Change",
+  "workspace_context.kind_word": "Word",
+  "workspace_context.kind_text": "Text",
+  "workspace_context.ways_separator": "; ",
 };
