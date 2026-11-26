@@ -1,4 +1,4 @@
-// Call rules (contract 2.0.0-w, docs/PLAN_CALL_RULES.md; lead decisions 25 and 28) as the window shows them: the
+// Call rules (contract 2.0.0-w, docs/PLAN_CALL_RULES.md; decisions 25 and 28) as the window shows them: the
 // account's After each call, When to ask and Short calls, and its rules for a contact (by name: the desktop knows no
 // numbers) or a Source, while the person's `call_rules` flag is on. The core keeps the account's answer for this
 // sign-in and says when it changes (`call_rules:changed`); null means the flag is off and this computer's own

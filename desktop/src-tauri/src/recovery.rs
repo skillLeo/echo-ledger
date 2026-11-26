@@ -37,6 +37,30 @@ pub struct Recovery {
     pub removed: Vec<String>,
 }
 
+/// The file a call recording started by hand, or from the "Record?" chip, carries in its folder: after a crash it waits
+/// for the person instead of following the account's After each call (decision 28).
+pub const BY_HAND: &str = "started-by-hand";
+
+/// Marks the call recording in `dir` as started by the person.
+pub fn mark_by_hand(dir: &Path) {
+    if dir.is_dir()
+        && let Err(e) = std::fs::write(dir.join(BY_HAND), b"")
+    {
+        eprintln!("[echoledger] marking a recording started by hand: {e}");
+    }
+}
+
+/// Whether the recording in `dir` was started by the person ([`mark_by_hand`]).
+pub fn started_by_hand(dir: &Path) -> bool {
+    dir.join(BY_HAND).is_file()
+}
+
+/// The recordings cut short that are kept by After each call at once (pure): all of them, as before, unless the account's
+/// rules decide, when one the person started (by hand or from the chip) waits for them instead (decision 28).
+pub fn recovered_to_keep(cut_short: &[String], follows_account: bool, by_hand: impl Fn(&str) -> bool) -> Vec<&String> {
+    cut_short.iter().filter(|id| !(follows_account && by_hand(id))).collect()
+}
+
 /// Deletes a recording folder that is done with (Discard, Undo, Cancel, a finished upload). It is marked first, so
 /// one that cannot be deleted now (a file held open by a virus scanner) is deleted at the next start instead of being
 /// recovered.

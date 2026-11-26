@@ -384,6 +384,11 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
     }
 }
 
+/// The recording the chip's Record started (pure): the one running after it, when it isn't the one running before.
+pub fn chip_started(before: Option<&str>, after: Option<String>) -> Option<String> {
+    after.filter(|now| before != Some(now.as_str()))
+}
+
 /// The chip's answer: `record` starts a call recording labelled `other` that stops when the tree releases the
 /// microphone; `ignore` silences the tree until it releases the microphone; `always_ignore` also adds a
 /// never-record rule to Settings.
@@ -399,10 +404,13 @@ pub async fn answer_ask(app: &AppHandle, id: &str, answer: &str) -> AppResult<()
             if let Some(t) = &target {
                 lock(&state.detect.call).adopt(t.root_pid);
             }
+            let before = state.capture.info().map(|i| i.client_ref);
             crate::actions::start_call_recording(app, SourceApp::Other.as_str(), true).await?;
-            // Asked for by the person (decision 28): the call rules never delete it.
-            if let Some(info) = state.capture.info() {
-                *state.chip_recording.lock().unwrap_or_else(|p| p.into_inner()) = Some(info.client_ref);
+            // Asked for by the person (decision 28): the call rules never delete it. Only a recording this click started:
+            // one already running (recorded by itself) keeps its rules.
+            if let Some(started) = chip_started(before.as_deref(), state.capture.info().map(|i| i.client_ref)) {
+                crate::recovery::mark_by_hand(&crate::net::sync::paths::recordings(&state.data_dir).join(&started));
+                *state.chip_recording.lock().unwrap_or_else(|p| p.into_inner()) = Some(started);
             }
         }
         ("ignore", Some(t)) => lock(&state.detect.ask).suppress(t.root_pid),

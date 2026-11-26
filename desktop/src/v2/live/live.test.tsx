@@ -333,7 +333,7 @@ describe("the app with ui_v2.live", () => {
     respond("list_clients", { data: [] });
     respond("mic_users", []);
     respondWith("update_settings", (args) => ({ ...makeSettings(), ...(args as { patch: object }).patch }));
-    // Every Auto-record control goes through one core command (lead decision 29: the account's After each call while its
+    // Every Auto-record control goes through one core command (decision 29: the account's After each call while its
     // call rules are kept, this computer's own switch otherwise), as the tray does.
     respondWith("auto_record_set", (args) => makeStatus({ autoMode: (args as { on: boolean }).on }));
     respond("ui_flags", { ui_flags: { "ui_v2.shell": true, "ui_v2.live": true } });

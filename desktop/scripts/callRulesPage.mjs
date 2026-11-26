@@ -5,7 +5,7 @@
 // is the window's own; a Mac shows it as its native menu). In English and in Urdu (right to left), on a Mac, light and
 // dark, at 1280 × 800, in the screens fixture with &callrules=1. Each picture is
 // docs/design/screens/desktop/call-rules/<scene>-<lang>-<theme>.png. The run fails when a scene doesn't show.
-//   node scripts/callRulesPage.mjs
+//   node scripts/callRulesPage.mjs            (ONLY=rules,rules-classic takes those scenes only)
 import { createServer } from "vite";
 import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
@@ -31,7 +31,7 @@ const SCENES = [
 try {
   for (const lang of ["en", "ur"]) {
     for (const theme of ["light", "dark"]) {
-      for (const [scene, section, look] of SCENES) {
+      for (const [scene, section, look] of SCENES.filter(([scene]) => !process.env.ONLY || process.env.ONLY.split(",").includes(scene))) {
         const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
         page.setDefaultTimeout(120_000);
         const shown_flags = look === "classic" ? FLAGS.split(",").filter((f) => f !== "ui_v2.settings").join(",") : FLAGS;

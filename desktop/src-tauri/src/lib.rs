@@ -151,7 +151,7 @@ pub struct AppState {
     /// reference and the account).
     pub recording_owner: Mutex<Option<(String, owner::Owner)>>,
     /// The recording started from the "Record?" chip (its client_ref): the person's own act, so no call rule, Don't
-    /// record or short call deletes it (lead decisions 28 and 29); it still stops by itself.
+    /// record or short call deletes it (decisions 28 and 29); it still stops by itself.
     pub chip_recording: Mutex<Option<String>>,
     /// The server said who this computer is signed in as (or that it has no accounts) this run.
     pub owner_checked: AtomicBool,

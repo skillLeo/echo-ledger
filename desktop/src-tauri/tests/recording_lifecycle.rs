@@ -1270,7 +1270,7 @@ fn the_recorder_counts_what_the_other_side_delivered_and_whether_it_was_more_tha
 
 #[test]
 fn a_contact_s_dont_record_stops_and_deletes_with_nothing_queued_but_its_deletion() {
-    // Contract 2.0.0-w, lead decisions 25 and 29: on the desktop a contact is known only once the call's window names
+    // Contract 2.0.0-w, decisions 25 and 29: on the desktop a contact is known only once the call's window names
     // it, so the recording stops then and what was written goes: its folder, and its server sessions, deleted and erased
     // from the Trash. No decision, upload or end of the call is written.
     use desktop_lib::call_rules;
@@ -1316,20 +1316,25 @@ fn a_contact_s_dont_record_stops_and_deletes_with_nothing_queued_but_its_deletio
     assert!(call_rules::STOPPED_TEXT.starts_with("Stopped and deleted"));
     assert!(!call_rules::STOPPED_TEXT.to_lowercase().contains("not recorded") && !call_rules::STOPPED_TEXT.contains(":name"));
 
-    // The steps that need the running app, in their order: marked and queued first; then Live Assist, Live Translate,
-    // the capture with its captions; what was written goes, with the one notice.
+    // The steps that need the running app, in their order: marked and queued first; then Live Translate and the capture
+    // with its captions stop; Live Assist ends after, in the background, never sending the turns it hadn't sent; what
+    // was written goes, with the one notice.
     let actions = include_str!("../src/actions.rs");
     let body = |start: &str| {
         let from = &actions[actions.find(start).unwrap_or_else(|| panic!("{start}"))..];
         from[..from.find("\n}\n").unwrap()].to_string()
     };
     let stop = body("async fn stop_for_contact_rule(");
-    let order = ["call_rules::mark_dropped(", "assist::live::end(app)", "crate::translate::stop(app);", "end_capture(app).await", "drop_for_rule(app,"];
+    let order = ["call_rules::mark_dropped(", "crate::translate::stop(app);", "end_capture(app).await", "assist::live::end_without_last_turns(&assist)", "drop_for_rule(app,"];
     let at: Vec<usize> = order.iter().map(|step| stop.find(step).unwrap_or_else(|| panic!("{step}"))).collect();
     assert!(at.windows(2).all(|w| w[0] < w[1]), "{stop}");
-    for never in ["decide_finished(", "enqueue_upload", "queue_call_end", "note_call_end", "refusal::say"] {
+    for never in ["decide_finished(", "enqueue_upload", "queue_call_end", "note_call_end", "refusal::say", "assist::live::end(app)"] {
         assert!(!stop.contains(never), "{never}: nothing is kept or sent, and the notice is said once");
     }
+    let live = include_str!("../src/assist/live.rs");
+    let quiet = &live[live.find("pub async fn end_without_last_turns(").unwrap()..];
+    let quiet = &quiet[..quiet.find("\n}\n").unwrap()];
+    assert!(quiet.contains("state.assist.take()") && quiet.contains("assist_end(") && !quiet.contains("send_last_turns"), "{quiet}");
     let drop = body("fn drop_for_rule(");
     assert_eq!(drop.matches("refusal::say(").count(), 1);
     assert!(drop.contains("call_rules::drop_recording(") && drop.contains("STOPPED_TEXT"));

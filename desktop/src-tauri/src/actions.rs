@@ -267,6 +267,9 @@ pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: 
     *state.system_watch.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
     *state.recording_started_at.lock().unwrap() = Some(Instant::now());
     state.auto_started.store(auto, Ordering::SeqCst);
+    if !auto {
+        crate::recovery::mark_by_hand(&paths::recordings(&state.data_dir).join(&info.client_ref));
+    }
     // "When to ask: At the start of the call": "Recording this call · Don't record" beside the pill for 5 s. The account's
     // After each call and When to ask while the call_rules flag is on (2.0.0-w).
     let settings = state.settings();
@@ -1400,12 +1403,13 @@ pub fn restore_pending(app: &AppHandle) {
 pub fn after_recovery(app: &AppHandle, cut_short: &[String]) {
     let state = app.state::<crate::AppState>();
     // The account's default while the call_rules flag is on (a Don't record waits in the Library, as Ask me).
-    let keeps = match crate::call_rules::Policy::of(&state).after(&state.settings(), None, "", true) {
+    let policy = crate::call_rules::Policy::of(&state);
+    let keeps = match policy.after(&state.settings(), None, "", true) {
         crate::call_rules::CallAfter::Choose(setting) => setting.keeps_at_once(),
         crate::call_rules::CallAfter::DontRecord => None,
     };
     if let Some(transcribe) = keeps {
-        for id in cut_short {
+        for id in crate::recovery::recovered_to_keep(cut_short, policy.follows_account(), |id| crate::recovery::started_by_hand(&paths::recordings(&state.data_dir).join(id))) {
             if let Err(e) = keep_decision_as(app, id, transcribe) {
                 eprintln!("[echoledger] keeping the recovered recording {id}: {e}");
             }
@@ -1508,7 +1512,8 @@ async fn stop_for_contact_rule(app: &AppHandle, client_ref: String) {
     if let Err(e) = crate::call_rules::mark_dropped(&state.data_dir, &dir, open.as_slice(), &state.queue_lock) {
         eprintln!("[echoledger] marking a recording a call rule stops: {e}");
     }
-    let _ = crate::assist::live::end(app).await;
+    // Live Translate, captions and the capture stop first; Live Assist ends after, in the background, without sending the
+    // turns it hasn't sent yet.
     crate::translate::stop(app);
     let session = match end_capture(app).await {
         Ok(Some((_, session, _))) => session,
@@ -1519,6 +1524,12 @@ async fn stop_for_contact_rule(app: &AppHandle, client_ref: String) {
             None
         }
     };
+    let assist = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = crate::assist::live::end_without_last_turns(&assist).await {
+            eprintln!("[echoledger] ending Live Assist for a call rule: {e}");
+        }
+    });
     let late = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).end_stop(&client_ref);
     let _ = take_call_choice(&state, &client_ref);
     let sessions: Vec<String> = session.into_iter().chain(late).collect();
@@ -2759,7 +2770,8 @@ mod call_rules_tests {
         let start = body(code, "pub async fn start_call_recording_with(");
         assert!(start.contains("policy.after_each_call(&settings, Some(source_app)), policy.ask_when(&settings), auto"), "the start banner");
         let recovery = body(code, "pub fn after_recovery(");
-        assert!(recovery.contains("Policy::of(&state).after("));
+        assert!(recovery.contains("let policy = crate::call_rules::Policy::of(&state);") && recovery.contains("policy.after(&state.settings(), None, \"\", true)"));
+        assert!(recovery.contains("recovered_to_keep(cut_short, policy.follows_account(),"), "one the person started waits");
     }
 }
 

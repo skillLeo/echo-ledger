@@ -1,4 +1,4 @@
-//! Call rules (contract 2.0.0-w, docs/PLAN_CALL_RULES.md; lead decision 25): the person's After each call, When to ask,
+//! Call rules (contract 2.0.0-w, docs/PLAN_CALL_RULES.md; decision 25): the person's After each call, When to ask,
 //! Short calls and their rules for a contact or a Source, kept for the whole account on the server, behind the
 //! interface flag `call_rules`. While the flag is off nothing here runs and every call follows this computer's own
 //! settings, as before.
@@ -174,7 +174,7 @@ pub fn contact_rule<'a>(rules: &'a CallRules, caller_name: &str) -> Option<&'a C
 }
 
 /// What a call follows (pure): while the account's rules are kept (the flag on), the account's settings and rules; else
-/// this computer's own settings, as before. Rules apply only to calls recorded by themselves (lead decision 28): a
+/// this computer's own settings, as before. Rules apply only to calls recorded by themselves (decision 28): a
 /// recording started by hand is the person's own act, and asks.
 #[derive(Clone, Debug, Default)]
 pub struct Policy {
@@ -237,7 +237,7 @@ impl Policy {
 
     /// What a call does once it ends: by the rules for one recorded by itself (with its caller's name, when known, and
     /// its Source); a call started by hand, or from the "Record?" chip, asks (decision 28). Once recording, only a
-    /// matched contact's Don't record deletes it (lead decision 29): a Source's or the default's is decided when the call
+    /// matched contact's Don't record deletes it (decision 29): a Source's or the default's is decided when the call
     /// starts, so one that came during the call (the tray, Settings, the phone) leaves it to end as Ask me.
     pub fn after(&self, settings: &Settings, caller_name: Option<&str>, source_app: &str, rules_apply: bool) -> CallAfter {
         let Some(rules) = &self.account else { return CallAfter::Choose(settings.after_call) };
@@ -296,7 +296,7 @@ impl Policy {
     }
 }
 
-/// Whether the call rules apply to a recording (pure; lead decisions 28 and 29): one recorded by itself (`auto`), and not
+/// Whether the call rules apply to a recording (pure; decisions 28 and 29): one recorded by itself (`auto`), and not
 /// the one the "Record?" chip started (`chip`), which the person asked for.
 pub fn rules_apply(auto: bool, chip: Option<&str>, client_ref: &str) -> bool {
     auto && chip != Some(client_ref)
@@ -503,6 +503,8 @@ pub fn keep(app: &AppHandle, rules: &CallRules) -> AppResult<()> {
     save(&state.data_dir, &sign_in, rules)?;
     let _ = app.emit(EVENT, rules);
     crate::actions::emit_status(app);
+    // Setup's and the tray's "not ready" follow the account's After each call.
+    crate::readiness::wake(app);
     Ok(())
 }
 
@@ -519,6 +521,7 @@ pub fn forget(app: &AppHandle) {
 fn forgotten(app: &AppHandle) {
     let _ = app.emit(EVENT, serde_json::Value::Null);
     crate::actions::emit_status(app);
+    crate::readiness::wake(app);
 }
 
 /// Whether calls record by themselves now: the account's After each call isn't Don't record (flag on), else this
@@ -572,10 +575,10 @@ pub async fn set_after_call(app: &AppHandle, after_call: &str) -> AppResult<()> 
 pub async fn set_auto_record(app: &AppHandle, on: bool) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     if kept(&state).is_none() {
-        // This computer's own switch, exactly as before the call rules.
-        state.update_settings(|s| s.auto_mode = on)?;
-        crate::actions::emit_status(app);
-        return Ok(());
+        return auto_mode_here(&state, on, |settings| {
+            let _ = app.emit("settings:changed", settings);
+            crate::actions::emit_status(app);
+        });
     }
     crate::commands::ensure_unlocked(&state)?;
     // On again: the account's last choice that records (Transcribe every call stays so), else Ask me.
@@ -591,6 +594,15 @@ pub async fn set_auto_record(app: &AppHandle, on: bool) -> AppResult<()> {
             Err(change_error(e))
         }
     }
+}
+
+/// This computer's own switch, exactly as before the call rules (what the window's `update_settings` does for it): saved,
+/// the readiness check woken (`readiness::wake`), then `told` the new settings (`settings:changed` and the status).
+fn auto_mode_here(state: &crate::AppState, on: bool, told: impl FnOnce(&Settings)) -> AppResult<()> {
+    let updated = state.update_settings(|s| s.auto_mode = on)?;
+    state.ready_wake.notify_one();
+    told(&updated);
+    Ok(())
 }
 
 /// The account's After each call for the tray's switch: `back` (its last choice that records, Ask me without one) when
@@ -794,7 +806,7 @@ mod tests {
         assert_eq!(account.after(&mine, Some("Ahmed Khan"), "google_meet", true), CallAfter::DontRecord);
         assert!(account.stops_for_caller("ahmed khan", true, false));
         assert!(!account.stops_for_caller("ahmed khan", true, true), "a choice made on the pill stands");
-        // Once recording, only a contact's Don't record deletes it (lead decision 29): Zoom's, decided when the call
+        // Once recording, only a contact's Don't record deletes it (decision 29): Zoom's, decided when the call
         // starts, leaves a Zoom call that is already recording (the rule came during it) to end as Ask me.
         assert_eq!(account.after(&mine, Some("Sara"), "zoom", true), CallAfter::Choose(AfterCall::Ask));
         assert_eq!(account.after(&mine, None, "zoom", true), CallAfter::Choose(AfterCall::Ask));
@@ -803,7 +815,7 @@ mod tests {
         let off = Policy::account(CallRules { after_call: Some(DONT_RECORD.into()), ..CallRules::default() });
         assert_eq!(off.after(&mine, Some("Sara"), "zoom", true), CallAfter::Choose(AfterCall::Ask));
         assert!(off.blocks_at_start("zoom"), "decided when the call starts");
-        // Started by hand (lead decision 28): the person's own act asks, and no rule stops it.
+        // Started by hand (decision 28): the person's own act asks, and no rule stops it.
         assert_eq!(account.after(&mine, Some("Ahmed Khan"), "zoom", false), CallAfter::Choose(AfterCall::Ask));
         assert!(!account.stops_for_caller("Ahmed Khan", false, false));
         // The "Record?" chip offers no app nobody knows while the default is Don't record (decision 29).
@@ -812,6 +824,28 @@ mod tests {
         assert_eq!(keep.short_call_seconds(&mine), 0);
         assert_eq!(account.after_each_call(&mine, Some("zoom")), AfterEachCall::Off);
         assert_eq!(account.after_each_call(&mine, Some("google_meet")), AfterEachCall::AlwaysTranscribe);
+    }
+
+    #[tokio::test]
+    async fn with_nothing_kept_the_switch_is_this_computer_s_saved_told_and_readiness_woken() {
+        // The flag off stays exactly as before: the window's update_settings saved it, said settings:changed and woke
+        // the readiness check.
+        let data = tempfile::tempdir().unwrap();
+        let state = crate::AppState::load(data.path().to_path_buf(), true);
+        let mut told = Vec::new();
+        auto_mode_here(&state, false, |s| told.push(s.auto_mode)).unwrap();
+        assert_eq!(told, [false], "told once, with the new settings");
+        assert!(!Settings::load(&data.path().join("settings.json")).auto_mode, "saved");
+        assert!(!state.settings().auto_mode);
+        tokio::time::timeout(std::time::Duration::from_millis(200), state.ready_wake.notified()).await.expect("readiness woken");
+        auto_mode_here(&state, true, |s| told.push(s.auto_mode)).unwrap();
+        assert_eq!(told, [false, true]);
+        assert!(Settings::load(&data.path().join("settings.json")).auto_mode);
+        // And the path set_auto_record takes with nothing kept is this one, saying settings:changed.
+        let source = include_str!("call_rules.rs");
+        let body = &source[source.find("pub async fn set_auto_record(").unwrap()..];
+        let local = &body[..body.find("crate::commands::ensure_unlocked(&state)?;").unwrap()];
+        assert!(local.contains("auto_mode_here(&state, on,") && local.contains("app.emit(\"settings:changed\", settings)"), "{local}");
     }
 
     #[test]

@@ -261,7 +261,7 @@ export function CallRulesPageV2() {
     <>
       {problem && <p role="alert" className="el-settings-v2__problem">{problem}</p>}
       <Group title={t("Your rules")} footer={notes.length ? <>{notes.map((n) => <p key={n}>{n}</p>)}</> : <p>{t("A rule for a contact comes first, then one for the app, then After each call.")}</p>}>
-        {rules.rules.length ? <List label={t("Call rules")}>{rules.rules.map(row)}</List> : <p className="el-secondary">{t("No rules yet.")}</p>}
+        {rules.rules.length ? <List label={t("Call rules")} className="el-call-rules">{rules.rules.map(row)}</List> : <p className="el-secondary">{t("No rules yet.")}</p>}
       </Group>
       <Group title={t("For an app")}>
         <div className="el-call-rule-form">

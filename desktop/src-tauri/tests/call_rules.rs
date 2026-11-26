@@ -153,7 +153,7 @@ async fn locked_the_tray_s_switch_changes_nothing_on_the_account() {
     let sent: Vec<Value> = server.requests_to("PUT", "/api/call-rules/settings").iter().map(|r| r.json()).collect();
     assert_eq!(sent, [json!({"after_call": "dont_record"}), json!({"after_call": "always_transcribe"}), json!({"after_call": "ask"}), json!({"after_call": "ask"})]);
     // Every way in checks the lock first: "Auto-record calls & meetings" (the tray, the Record and Live menus, Home, the
-    // Mac menu bar: one core function, lead decision 29), the card's "Always do this?", and each command the window and
+    // Mac menu bar: one core function, decision 29), the card's "Always do this?", and each command the window and
     // its menus use.
     let source = include_str!("../src/call_rules.rs");
     let body = |source: &'static str, start: &str| {
@@ -187,7 +187,7 @@ fn kept_rule(id: &str, kind: &str, name: Option<&str>, source_app: Option<&str>,
 
 #[test]
 fn only_a_contact_s_dont_record_deletes_a_recording_and_only_one_recorded_by_itself() {
-    // Lead decisions 25, 28 and 29, as the end of a call meets them.
+    // Decisions 25, 28 and 29, as the end of a call meets them.
     let mine = Settings { auto_mode: true, after_call: AfterCall::AlwaysTranscribe, ask_when: AskWhen::After, skip_calls_shorter_than_s: 0, ..Settings::default() };
     let account = |after_call: &str, rules: Vec<CallRule>| {
         Policy::account(CallRules { after_call: Some(after_call.into()), ask_when: Some("at_start".into()), short_calls: Some("dont_keep".into()), rules, ..CallRules::default() })
@@ -305,4 +305,33 @@ async fn a_rule_another_device_removed_is_read_again() {
             .fixed("GET", "/api/call-rules", Reply::json(404, json!({"code": "not_found", "message": "Not found."}))),
     );
     assert!(matches!(call_rules::update_rule(&client(&off), "gone", &json!({"action": "ask"})).await.unwrap(), RuleChanged::Gone(Reread::Off)));
+}
+
+#[test]
+fn the_chip_marks_only_a_recording_it_started_and_a_crashed_one_the_person_started_waits() {
+    use desktop_lib::detect::chip_started;
+    // Decision 28: Record on the chip makes a recording the person's own; one already running (recorded by itself)
+    // keeps its rules.
+    assert_eq!(chip_started(None, Some("rec-2".into())).as_deref(), Some("rec-2"));
+    assert_eq!(chip_started(Some("rec-1"), Some("rec-1".into())), None, "it was running already");
+    assert_eq!(chip_started(Some("rec-1"), Some("rec-2".into())).as_deref(), Some("rec-2"));
+    assert_eq!(chip_started(None, None), None, "nothing started");
+
+    // On disk: the folder says so, and after a crash such a recording waits for the person under the account's rules;
+    // with the flag off, every one cut short follows After each call, as before.
+    let data = tempfile::tempdir().unwrap();
+    let dir = desktop_lib::net::sync::paths::recordings(data.path()).join("rec-hand");
+    std::fs::create_dir_all(&dir).unwrap();
+    assert!(!desktop_lib::recovery::started_by_hand(&dir));
+    desktop_lib::recovery::mark_by_hand(&dir);
+    assert!(desktop_lib::recovery::started_by_hand(&dir));
+    desktop_lib::recovery::mark_by_hand(&data.path().join("gone")); // no folder: nothing written
+    assert!(!data.path().join("gone").exists());
+    let cut = ["rec-hand".to_string(), "rec-auto".to_string()];
+    let by_hand = |id: &str| desktop_lib::recovery::started_by_hand(&desktop_lib::net::sync::paths::recordings(data.path()).join(id));
+    assert_eq!(desktop_lib::recovery::recovered_to_keep(&cut, true, by_hand), [&cut[1]]);
+    assert_eq!(desktop_lib::recovery::recovered_to_keep(&cut, false, by_hand), [&cut[0], &cut[1]]);
+    let source = include_str!("../src/actions.rs");
+    let start = &source[source.find("pub async fn start_call_recording_with(").unwrap()..];
+    assert!(start[..start.find("\n}\n").unwrap()].contains("if !auto {\n        crate::recovery::mark_by_hand("));
 }

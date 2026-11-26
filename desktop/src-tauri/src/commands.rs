@@ -2492,9 +2492,8 @@ async fn call_rule_answer<T>(app: &AppHandle, answer: AppResult<T>) -> AppResult
     }
 }
 
-/// The kept rules changed by `change`, kept and returned (read first when none is kept yet). With none to change (the
-/// flag just turned off, or the read failed), nothing is kept: the flag off says so; otherwise the next config reads
-/// the whole answer.
+/// The kept rules changed by `change`, kept and returned (read first when none is kept yet). With none to change, the
+/// flag off says so; otherwise the answer is read afresh (it has the change), never one rule alone.
 async fn with_kept_rules(app: &AppHandle, change: impl FnOnce(crate::net::models::CallRules) -> crate::net::models::CallRules) -> AppResult<crate::net::models::CallRules> {
     let state = app.state::<AppState>();
     if crate::call_rules::kept(&state).is_none() {
@@ -2504,7 +2503,10 @@ async fn with_kept_rules(app: &AppHandle, change: impl FnOnce(crate::net::models
         if !crate::call_rules::flag_on(&state) {
             return Err(AppError::msg(crate::call_rules::FLAG_OFF_TEXT));
         }
-        return Ok(change(crate::net::models::CallRules::default()));
+        // The change is on the server: a fresh read has it, with everything else.
+        let fresh = state.api()?.call_rules().await.map_err(crate::call_rules::change_error)?;
+        crate::call_rules::keep(app, &fresh)?;
+        return Ok(fresh);
     };
     let rules = change(kept);
     crate::call_rules::keep(app, &rules)?;

@@ -2533,5 +2533,8 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-zoom-bubble__reset { padding: 0; border: 0; background: transparent; color: var(--el-role-accent-text); font: inherit; cursor: pointer; text-decoration: underline; }
 
 /* Call rules (contract 2.0.0-w): an add form's fields side by side, wrapping in a narrow window, its button at their foot. */
+/* A rule's second line (decision 25's "Stops and deletes the recording as soon as … is known") wraps, in the classic
+ * Settings too, never cut off. */
+.el-call-rules .el-row__meta-text { white-space: normal; overflow-wrap: break-word; }
 .el-call-rule-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--el-space-12); padding: var(--el-space-12) var(--el-space-16); }
 .el-call-rule-form > .el-field { flex: 1 1 calc(var(--el-space-64) * 3); min-inline-size: 0; }
