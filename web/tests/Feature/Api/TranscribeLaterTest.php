@@ -544,7 +544,7 @@ describe('the review of 5f74e162', function () {
     });
 });
 
-describe('bulk Transcribe on the queue (EL-UX\'s finding)', function () {
+describe('bulk Transcribe on the queue (the UX audit\'s finding)', function () {
     beforeEach(function () {
         minutesLimit($this->owner, null);
         // 50 short recordings (30 s each): each one alone would take the fast path.

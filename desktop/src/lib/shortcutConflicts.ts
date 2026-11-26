@@ -76,7 +76,7 @@ export function conflictFor(accelerator: string | undefined, platform: Platform)
 }
 
 /**
- * Who else uses a shortcut (desktop Urdu, EL-UX): browsers, many apps, or one app or system by its name (Spotlight,
+ * Who else uses a shortcut (desktop Urdu, UX review): browsers, many apps, or one app or system by its name (Spotlight,
  * Safari; else Windows or macOS for the system's own keys); null when it is not a known one.
  */
 export function conflictOwner(accelerator: string | undefined, platform: Platform): ConflictOwner | null {

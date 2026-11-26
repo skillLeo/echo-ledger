@@ -1,4 +1,4 @@
-// The Library's places since the redesign (PLAN_LIBRARY_FILTERS §6 and its lead decisions; docs/v2/audit/parity.csv
+// The Library's places since the redesign (PLAN_LIBRARY_FILTERS §6 and its decisions; docs/v2/audit/parity.csv
 // DT-NAV-003, DT-LIB-115, DT-LIB-116, DT-LIB-117): the sidebar's LIBRARY views with their counts (Waiting and Failed
 // uploads are counted in Needs you; Pinned is the Pinned section at the top of every list and Marked › Pinned), and
 // today's smart folders as Source and Project choices (the Inbox is Project › No project, an app is its Source, Imported

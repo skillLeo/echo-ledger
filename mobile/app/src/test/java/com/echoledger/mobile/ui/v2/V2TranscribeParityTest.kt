@@ -367,7 +367,7 @@ class V2TranscribeParityTest : ScreenTest() {
         compose.onAllNodes(hasText("Cancel") and hasAnyAncestor(isDialog())).assertCountEquals(0)
     }
 
-    // Copy for AI of several recordings (the lead's review of parity 3).
+    // Copy for AI of several recordings (the review of parity 3).
 
     private val segments = listOf(
         SegmentDto(

@@ -1,5 +1,5 @@
 // The person an Activity item is about (contract 2.0.0-aa) and when their face takes the kind's icon's place: only for
-// the neutral kinds, as the web console does (lead decision 27, PERSON_KINDS in web/app/Filament/Pages/Activity.php).
+// the neutral kinds, as the web console does (decision 27, PERSON_KINDS in web/app/Filament/Pages/Activity.php).
 // A warning, a failure or a receipt asked for keeps its tile, the only sign of what it is, whoever it is about. Pure,
 // so the new look and the classic page read it the same way, and the phone mirrors it.
 import type { ActivityActor, ActivityItem } from "./ipc";

@@ -45,8 +45,9 @@ Before the fixes:
 
 Left, all moderate or minor: `region` (the Terms and Privacy links are outside every landmark), Settings' own `<main>`
 inside the page's (`landmark-main-is-top-level`, `landmark-no-duplicate-main`, `landmark-unique`) and Filament's empty
-actions column heading (`empty-table-header`). Both changes touch classic's markup (the Settings page is in
-ClassicGoldenTest), so they are logged for later (W-228, W-229).
+actions column heading (`empty-table-header`). Both change classic's markup (the Settings page is in ClassicGoldenTest).
+W-228 waits for the next classic change; W-229 is fixed since: every table's row actions have a visually hidden
+heading in the console's language, and the column stays as narrow as before (ActionsHeadingTest).
 
 ## Keyboard
 
@@ -70,7 +71,7 @@ The resize edges of the place's panel and the Library's filters already move by 
 | W-226 | S2 | Recording at 390 px | A table box that scrolls could not be reached by keyboard | Fixed: such a box takes the focus while nothing in it can, as a region named by its table's heading |
 | W-227 | S2 | Rail | Every rail item was its own Tab stop; the arrows did nothing (FIX-06) | Fixed: one stop (written by the frame's Blade, kept by the help script), a roving tabindex, the arrows, Home and End; an open menu keeps the arrows |
 | W-228 | S3 | Settings, every page | Settings' `<main>` inside the page's; the footer links outside a landmark | Logged |
-| W-229 | S4 | Workspace (People) | Filament's actions column heading is empty | Logged |
+| W-229 | S4 | Workspace (People) | Filament's actions column heading is empty | Fixed (fix/W-229-actions-heading) |
 
 No S0 or S1. Tests: `tests/js/a11y-core.test.mjs` (the help script, `install()` included: menus and an open trigger keep
 the arrows, modifier keys are left alone, a redraw gets exactly one stop back, focus moves the stop, a pass after Alpine

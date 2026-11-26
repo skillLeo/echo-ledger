@@ -22,7 +22,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * EL-UX's audit: a Trash the server could not give showed "Nothing deleted recently", as if it were empty. It says it
+ * The UX audit: a Trash the server could not give showed "Nothing deleted recently", as if it were empty. It says it
  * could not be loaded (v2_trash_error), in the screen's language, and Try again asks again.
  */
 class TrashLoadErrorTest : ScreenTest() {

@@ -7,7 +7,7 @@ import org.junit.Test
 
 /**
  * Contract 2.0.0-aa on the phone: an Activity item's `actor`, read leniently as the desktop does (a bad actor never
- * costs the item or the list), whose face shows only for the neutral kinds (lead decision 27), in the server's colour.
+ * costs the item or the list), whose face shows only for the neutral kinds (decision 27), in the server's colour.
  */
 class ActivityActorTest {
     private fun page(vararg actors: String): List<ActivityItemDto> = ApiJson.decodeFromString(

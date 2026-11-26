@@ -54,7 +54,7 @@ describe("an English sentence in a right-to-left window", () => {
     expect(getComputedStyle(chip).textAlign).not.toBe("match-parent");
   });
 
-  it("leaves v2 screens to their own rules (D4 for v2 is EL-UX's)", () => {
+  it("leaves v2 screens to their own rules (v2 has its own D4 tests)", () => {
     const { container } = rtl(<div className="el-root" data-shell="v2"><span className="el-meta">Northwind · 42:10</span></div>);
     expect(getComputedStyle(container.querySelector(".el-meta")!).unicodeBidi).not.toBe("plaintext");
   });

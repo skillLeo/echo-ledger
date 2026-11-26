@@ -9,7 +9,7 @@ use App\Models\User;
 use Closure;
 
 /**
- * Which workspace the running code acts for (docs/HANDOFF.md "B20 design" → Current workspace):
+ * Which workspace the running code acts for (docs/ARCHITECTURE.md "Workspaces in detail" → Current workspace):
  * an explicit `runAs()` id, else the user or device that a guard has already authenticated (`hasUser()` only:
  * resolving a guard here could recurse into the token lookup). Webhooks, public share links, pairing, console
  * commands and queue workers have none and work on explicit ids.

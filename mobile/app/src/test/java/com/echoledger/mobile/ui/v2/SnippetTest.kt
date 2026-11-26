@@ -52,7 +52,10 @@ class SnippetTest {
         assertEquals("کل کی میٹنگ کا وقت بدل گیا ہے۔", firstSentence("\u200FSpeaker:\u200F کل کی میٹنگ کا وقت بدل گیا ہے۔"))
         assertEquals("I will send it tomorrow.", firstSentence("Me: Thanks. I will send it tomorrow."))
         // In a labelled transcript a later phrase before a colon is a speaker only when it looks like a name.
-        assertEquals("The main issue is this: the invoice is late.", firstSentence("Client: Okay. The main issue is this: the invoice is late."))
+        assertEquals(
+            "The main issue is this: the invoice is late.",
+            firstSentence("Client: Okay. The main issue is this: the invoice is late.")
+        )
         assertEquals("I will send it to you: tomorrow.", firstSentence("Me: Thanks. I will send it to you: tomorrow."))
         assertEquals(
             "The second container leaves Karachi on the 14th.",

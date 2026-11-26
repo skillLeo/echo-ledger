@@ -365,7 +365,7 @@ export function eraseIn(eraseAt: string, now: number = Date.now()): string {
 export function BinPanel({ notify, onClose }: { notify: Notify; onClose: () => void }) {
   const keepHours = useTrashKeepHours();
   const [items, setItems] = useState<BinItem[] | null>(null);
-  // A bin the server could not give is not an empty one (EL-UX's audit): the panel says so, with Try again.
+  // A bin the server could not give is not an empty one (the UX audit): the panel says so, with Try again.
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const load = () => api.bin().then((r) => { setItems(r.data ?? []); setFailed(false); }, () => setFailed(true));

@@ -14,9 +14,9 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /*
-| B20 migrations (docs/HANDOFF.md "B20 design"): up → down → up on a database that already holds a realistic
-| library, on the test driver (SQLite here, MariaDB in the MariaDB run). Uses its own connection `cycle` so the
-| test transaction of the default connection is not involved.
+| B20 migrations (docs/ARCHITECTURE.md "Workspaces in detail"): up → down → up on a database that already holds a
+| realistic library, on the test driver (SQLite here, MariaDB in the MariaDB run). Uses its own connection `cycle`
+| so the test transaction of the default connection is not involved.
 */
 
 const CYCLE_SCOPED = ['devices', 'device_pairing_codes', 'clients', 'capture_sessions', 'usage_ledger'];

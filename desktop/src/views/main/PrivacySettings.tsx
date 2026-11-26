@@ -60,7 +60,7 @@ export function sharePrivacyTop(hiding: ShareHiding | null | undefined, badge: P
 }
 
 /** "Hide EchoLedger from screen sharing"'s help line: the system hides a window from screen sharing and from
- * screenshots with one flag, on macOS and on Windows alike (the call choice plan, lead decision). Nothing else changes. */
+ * screenshots with one flag, on macOS and on Windows alike (a decision of the call choice plan). Nothing else changes. */
 export const HIDES_SCREENSHOTS_TOO = setting("share_privacy.hiding").description ?? "";
 
 

@@ -238,7 +238,7 @@ describe("the title row (UX-20)", () => {
     expect(row()).toHaveClass("el-titlerow--scrolled");
   });
 
-  it("narrow (lead decision 18's narrow case, under 720 CSS px): Search (Ctrl+F) opens the field across the row, the title aside only while it is open; Esc or leaving it empty closes it", () => {
+  it("narrow (decision 18's narrow case, under 720 CSS px): Search (Ctrl+F) opens the field across the row, the title aside only while it is open; Esc or leaving it empty closes it", () => {
     const wide = window.innerWidth;
     Object.defineProperty(window, "innerWidth", { value: 360, configurable: true, writable: true });
     try {

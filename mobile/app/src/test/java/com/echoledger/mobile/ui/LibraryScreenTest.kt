@@ -124,7 +124,7 @@ class LibraryScreenTest : ScreenTest() {
         assertEquals("f1", opened?.id)
     }
 
-    /** EL-UX's audit: Recently deleted that the server could not give says so, not "Nothing deleted", and Try again asks again. */
+    /** The UX audit: Recently deleted that the server could not give says so, not "Nothing deleted", and Try again asks again. */
     @Test
     fun `Recently deleted that could not be loaded says so, and Try again loads it`() {
         seed(item("a1"))

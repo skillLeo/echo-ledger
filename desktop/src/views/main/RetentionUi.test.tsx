@@ -66,7 +66,7 @@ describe("keep, the undo bin and storage (B17)", () => {
     expect(notify.mock.calls.map((c) => c[0])).toEqual(["Restored", "Erased"]);
   });
 
-  it("says Recently deleted couldn't be loaded, never that it is empty, and Try again loads it (EL-UX's audit)", async () => {
+  it("says Recently deleted couldn't be loaded, never that it is empty, and Try again loads it (the UX audit)", async () => {
     fail("bin_list", "Server returned 500: Server Error");
     render(<BinPanel notify={vi.fn()} onClose={vi.fn()} />);
     expect(await screen.findByText("Couldn't load Recently deleted. Check the internet connection.")).toBeInTheDocument();
