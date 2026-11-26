@@ -1,13 +1,16 @@
 // The `assist` window (the core opens it per L4: top-centre under the webcam, hidden from screen sharing, click-through
 // outside the card). Shown while live_assist is on for this person, in classic and the new design alike. In a development build
-// `?assistfixture` plays the fixture session instead of listening to the core.
+// `?assistfixture` plays the fixture session instead of listening to the core. It speaks the main window's language
+// (D-264): Urdu only while the account's is Urdu in the new design, English in classic.
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useHitRegions } from "../../lib/hitRegions";
 import { useConcealed } from "../../lib/privacy";
 import { WindowShareBadge } from "../../components/ShareVisibility";
-import { announceReady, errorMessage } from "../../lib/ipc";
+import { announceReady } from "../../lib/ipc";
+import { language, setLanguage, t, useLanguage } from "../../i18n";
+import { KEPT_LANGUAGE_KEY, chosenLanguage, readKeptLanguage } from "../../i18n/language";
 import { useUiFlags } from "../flags";
-import { assist, type AssistMessage, type AssistMode, type HintLevel, type SendKind } from "./adapter";
+import { assist, failureText, type AssistMessage, type AssistMode, type HintLevel, type SendKind } from "./adapter";
 import { AssistCard, CONSENT_LINE } from "./AssistCard";
 import { EMPTY_CARD, cardReducer, isSessionActive, sessionActiveOf, shown, type CardState } from "./card";
 import type { SessionActive } from "./adapter";
@@ -32,6 +35,26 @@ export function reduce(state: CardState, a: Action): CardState {
     case "session_active_dismissed": return { ...state, sessionActive: null, pendingStart: null };
     default: return cardReducer(state, a);
   }
+}
+
+/**
+ * The language the main window keeps on this computer for the account (i18n/language.ts: whether Urdu is on, in the new
+ * design, and the account's language), as this window's; again whenever the main window changes it.
+ */
+export function useKeptLanguage() {
+  useEffect(() => {
+    const follow = () => {
+      const kept = readKeptLanguage();
+      const want = chosenLanguage({ on: kept.on, signedIn: true, account: undefined, kept: kept.account });
+      if (language() !== want) void setLanguage(want);
+    };
+    follow();
+    const changed = (e: StorageEvent) => {
+      if (e.key === null || e.key === KEPT_LANGUAGE_KEY) follow();
+    };
+    window.addEventListener("storage", changed);
+    return () => window.removeEventListener("storage", changed);
+  }, []);
 }
 
 export function useAssistCard(fixture: boolean): [CardState, (a: Action) => void, { hint: HintLevel; setHint: (h: HintLevel) => void; mutedUntil: number; setMutedUntil: (t: number) => void }] {
@@ -71,6 +94,8 @@ export function useAssistCard(fixture: boolean): [CardState, (a: Action) => void
 }
 
 export default function AssistApp() {
+  useKeptLanguage();
+  useLanguage();
   const fixture = import.meta.env.DEV && new URLSearchParams(location.search).has("assistfixture");
   // Read once; the core's first config answer (ui:flags) still arrives when this card opened before it: from nothing
   // to the card, never one look to another.
@@ -103,7 +128,7 @@ export default function AssistApp() {
   }, [fixture, onCard?.id, onCard?.text]);
 
   const run = useCallback((fn: () => Promise<unknown>) => {
-    fn().catch((e) => dispatch(isSessionActive(e) ? { type: "session_active_refused", active: sessionActiveOf(e) } : { type: "local_error", text: errorMessage(e) }));
+    fn().catch((e) => dispatch(isSessionActive(e) ? { type: "session_active_refused", active: sessionActiveOf(e) } : { type: "local_error", text: failureText(e) }));
   }, [dispatch]);
   const start = (prepId: string | null, clientRef: string | null) => {
     dispatch({ type: "starting", prepId, clientRef });
@@ -113,7 +138,7 @@ export default function AssistApp() {
   if (concealed || (!fixture && readFor === null) || !on || (state.ended && !state.offer)) return <div className="el-root el-embedded el-assist-root" />;
   return (
     <div className="el-root el-embedded el-assist-root">
-      <h1 className="el-visually-hidden">Live Assist</h1>
+      <h1 className="el-visually-hidden">{t("Live Assist")}</h1>
       <AssistCard state={state} hint={local.hint} muted={local.mutedUntil > now} badge={<WindowShareBadge />}
         actions={{
           onSend: (kind: SendKind) => run(() => assist.send(kind)),

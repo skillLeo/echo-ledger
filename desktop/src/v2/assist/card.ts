@@ -10,6 +10,8 @@
 // Since 1.9.0-n: a `skip` naming a suggestion ends it; `ready` with `resumed: true` clears a card still streaming;
 // every error code gets the app's own plain sentence (errorWords); a `session_active` refusal offers to end the running
 // session and start this one; the core's `offer` asks whether to start Live Assist for the call.
+// The app's words are in the window's language (D-264), or in English where a caller asks for it (classic's prep).
+import { wordsIn, type Lang } from "../../i18n";
 import type { AssistMessage, AssistMode, LiveMode, MeetingType, SessionActive, SuggestionKind } from "./adapter";
 
 export type Suggestion = {
@@ -60,20 +62,31 @@ export const EMPTY_CARD: CardState = {
   offer: null, sessionActive: null, pendingStart: null,
 };
 
-const MODE_WORDS: Record<LiveMode, string> = { fast: "Fast", balanced: "Balanced", deep: "Deep", max: "Max", captions_only: "Captions only" };
-export const modeLabel = (mode: LiveMode) => MODE_WORDS[mode];
+/** A mode's name, in the window's language. */
+export function modeLabel(mode: LiveMode, lang?: Lang): string {
+  const { t } = wordsIn(lang);
+  switch (mode) {
+    case "fast": return t("Fast");
+    case "balanced": return t("Balanced");
+    case "deep": return t("Deep");
+    case "max": return t("Max");
+    case "captions_only": return t("Captions only");
+  }
+}
 
-/** Why the mode changed, in words (never a code). */
-export function modeNote(mode: LiveMode, reason: Extract<AssistMessage, { type: "mode_changed" }>["reason"]): string | null {
+/** Why the mode changed, in words (never a code), in the window's language. */
+export function modeNote(mode: LiveMode, reason: Extract<AssistMessage, { type: "mode_changed" }>["reason"], lang?: Lang): string | null {
+  const { t } = wordsIn(lang);
   if (reason === "requested") return null;
   if (mode === "captions_only") {
-    return reason === "plan" ? "Live Assist isn't in your plan. Captions go on." : "This month's assist hours are used. Assist is paused; captions go on.";
+    return reason === "plan" ? t("Live Assist isn't in your plan. Captions go on.") : t("This month's assist hours are used. Assist is paused; captions go on.");
   }
+  const named = modeLabel(mode, lang);
   switch (reason) {
-    case "budget": return `Switched to ${MODE_WORDS[mode]} to stay within your assist hours.`;
-    case "budget_restored": return `Back to ${MODE_WORDS[mode]}.`;
-    case "plan": return `${MODE_WORDS[mode]} is the best mode your plan has.`;
-    case "assist_time": return `Switched to ${MODE_WORDS[mode]}: this session is close to its time limit.`;
+    case "budget": return t("Switched to :mode to stay within your assist hours.", { mode: named });
+    case "budget_restored": return t("Back to :mode.", { mode: named });
+    case "plan": return t(":mode is the best mode your plan has.", { mode: named });
+    case "assist_time": return t("Switched to :mode: this session is close to its time limit.", { mode: named });
   }
 }
 
@@ -94,22 +107,24 @@ function previousShown(state: CardState, id: string): string | null {
 
 /**
  * The app's own sentence for a relay error code (1.9.0-n), never the code itself; null when the card says nothing
- * (an unknown message type, a token being renewed). Never the relay's text: its words are not the app's.
+ * (an unknown message type, a token being renewed). Never the relay's text: its words are not the app's. In the
+ * window's language, or in `lang`.
  */
-export function errorWords(code: string, retry: boolean, _message = ""): string | null {
+export function errorWords(code: string, retry: boolean, _message = "", lang?: Lang): string | null {
+  const { t } = wordsIn(lang);
   switch (code) {
-    case "budget_exhausted": return retry ? "Try again in a moment." : "Suggestions are off for this call.";
-    case "provider_not_configured": return "Live Assist isn't set up on this server yet.";
+    case "budget_exhausted": return retry ? t("Try again in a moment.") : t("Suggestions are off for this call.");
+    case "provider_not_configured": return t("Live Assist isn't set up on this server yet.");
     case "provider_unavailable":
-    case "provider_timeout": return "That suggestion didn't come through. Try again in a moment.";
-    case "model_declined": return "This one can't be answered here. Try Regenerate, or ask in other words.";
-    case "nothing_to_rewrite": return "There's nothing on the card to rewrite yet.";
-    case "documents_too_large": return "The documents are too large for this session. The earlier ones are still used.";
-    case "rate_limited": return "Too many requests at once. Try again in a moment.";
-    case "session_active": return "Another Live Assist session is running.";
+    case "provider_timeout": return t("That suggestion didn't come through. Try again in a moment.");
+    case "model_declined": return t("This one can't be answered here. Try Regenerate, or ask in other words.");
+    case "nothing_to_rewrite": return t("There's nothing on the card to rewrite yet.");
+    case "documents_too_large": return t("The documents are too large for this session. The earlier ones are still used.");
+    case "rate_limited": return t("Too many requests at once. Try again in a moment.");
+    case "session_active": return t("Another Live Assist session is running.");
     case "bad_message": return null;
-    case "token_expired": return retry ? null : "Live Assist stopped: sign in again to start a new session.";
-    default: return "Something went wrong with Live Assist.";
+    case "token_expired": return retry ? null : t("Live Assist stopped: sign in again to start a new session.");
+    default: return t("Something went wrong with Live Assist.");
   }
 }
 
@@ -217,9 +232,16 @@ export function boldParts(text: string): { text: string; bold: boolean }[] {
   return text.split(/(\*\*[^*]+\*\*)/).filter(Boolean).map((p) => (p.startsWith("**") && p.endsWith("**") ? { text: p.slice(2, -2), bold: true } : { text: p, bold: false }));
 }
 
-/** "Start Live Assist for Interview at Mehran Foods with Ayesha Siddiqui?" ("with …" only when the caller is known). */
-export function offerQuestion(offer: { title: string; caller: string | null }): string {
-  return `Start Live Assist for ${offer.title.trim() || "this call"}${offer.caller ? ` with ${offer.caller}` : ""}?`;
+/**
+ * "Start Live Assist for Interview at Mehran Foods with Ayesha Siddiqui?" ("with …" only when the caller is known), in
+ * the window's language.
+ */
+export function offerQuestion(offer: { title: string; caller: string | null }, lang?: Lang): string {
+  const { t } = wordsIn(lang);
+  const title = offer.title.trim();
+  const caller = offer.caller;
+  if (title) return caller ? t("Start Live Assist for :title with :caller?", { title, caller }) : t("Start Live Assist for :title?", { title });
+  return caller ? t("Start Live Assist for this call with :caller?", { caller }) : t("Start Live Assist for this call?");
 }
 
 /** Whether a rejection is the server's 409 session_active (the core passes its code along). */
@@ -228,14 +250,15 @@ export function isSessionActive(e: unknown): boolean {
   return code === "session_active" || (typeof e === "string" && /session_active/.test(e));
 }
 
-/** The core's description of the running session, with the app's words where it sends none. */
-export function sessionActiveOf(e: unknown): SessionActive {
+/** The core's description of the running session, with the app's words (the window's language, or `lang`) where it sends none. */
+export function sessionActiveOf(e: unknown, lang?: Lang): SessionActive {
+  const { t } = wordsIn(lang);
   const o = (e && typeof e === "object" ? e : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
   return {
     session_id: str(o.session_id),
     practice: o.practice === true,
-    text: str(o.text) ?? (o.practice === true ? "A practice session is running." : "Another Live Assist session is running."),
-    action: str(o.action) ?? "End it and start this one",
+    text: str(o.text) ?? (o.practice === true ? t("A practice session is running.") : t("Another Live Assist session is running.")),
+    action: str(o.action) ?? t("End it and start this one"),
   };
 }
