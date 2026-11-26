@@ -62,10 +62,12 @@ use Filament\Auth\Http\Requests\BlockEmailChangeVerificationRequest;
 use Filament\Auth\Http\Requests\EmailChangeVerificationRequest;
 use Filament\Notifications\Notification as FilamentNotification;
 use Filament\Support\Facades\FilamentTimezone;
+use Filament\Tables\Table;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Foundation\Console\AboutCommand;
@@ -81,6 +83,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Translation\Translator;
@@ -224,6 +227,13 @@ class AppServiceProvider extends ServiceProvider
         // Filament's generic "Submit" or "Confirm". An action that names its button keeps that name.
         Action::configureUsing(static function (Action $action): void {
             $action->modalSubmitActionLabel(static fn (Action $action): ?string => rtrim((string) $action->getLabel(), ' ….') ?: null);
+        });
+
+        // A table's row actions have a column heading a screen reader says ("Actions", in the console's language;
+        // W-229, axe empty-table-header): the word is visually hidden, and theme.css keeps the column as narrow as
+        // the empty heading Filament draws without it (.el-actions-heading), so nothing moves on screen.
+        Table::configureUsing(static function (Table $table): void {
+            $table->recordActionsColumnLabel(static fn (): Htmlable => new HtmlString('<span class="el-actions-heading">'.e(__('Actions')).'</span>'));
         });
 
         // Times are stored in UTC and shown in the zone chosen under Settings (read lazily: no query at boot).
