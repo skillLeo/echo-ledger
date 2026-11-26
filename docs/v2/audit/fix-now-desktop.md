@@ -27,7 +27,7 @@ lines.
   Projects 8, Shared 6, Activity 5, Help 5, Plan 5, Sign-in 3, Upload 1.
 - By platform: 123 desktop, 2 desktop-mac (D-113, D-120).
 
-## (b) Fix now: 29 open rows in 6 builder batches
+## (b) Fix now: 29 open rows in 6 fix batches
 
 Do Batch 1 first. D-105 is S0, and PLAN_V2_0 says an S0 is fixed before any release, so before v1.8.1 ships.
 Batches 1–4 apply the cross-cutting rules. Batches 5–6 go page by page.
