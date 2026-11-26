@@ -44,6 +44,17 @@ export const CASES = [
     await chip.click({ button: "right", position: { x: box.width / 3, y: box.height - 2 } });
     await page.waitForTimeout(300);
   }],
+  ["g-rows", "gallery", "?v2gallery&screen=rows", ["en", "ur"], async (page) => { await page.locator(".el-row--library").nth(3).hover(); await page.waitForTimeout(200); }],
+  ["g-split", "gallery", "?v2gallery&screen=split", ["en", "ur"], async (page) => {
+    // Open: the chevron by keyboard, so the menu's first item shows its focus. Focus: the chevron of its own case (the
+    // last input was a key, so the ring shows). Hover: the pointer over the main part of its case.
+    await page.locator('[data-case="open"] .el-split__more').focus();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(150);
+    await page.locator('[data-case="focus"] .el-split__more').evaluate((el) => el.focus());
+    await page.locator('[data-case="hover"] .el-split__main').hover();
+    await page.waitForTimeout(200);
+  }],
   ["a-library", "app", app("library"), ["en"]],
   ["a-recording", "app", app("library"), ["en"], async (page) => { await page.locator(".el-row__hit").first().click(); await page.waitForTimeout(1200); }],
   ["a-recording-screens", "app", app("library"), ["en"], async (page) => { await page.getByRole("button", { name: "Weekly sync with Northwind", exact: true }).click(); await page.waitForTimeout(1500); }],
@@ -191,6 +202,14 @@ export const REVIEWS = {
       ["desktop-lists-dialog", "g-lists-dialog"],
       ["desktop-lists-addto", "g-lists-addto"],
       ["desktop-lists-chipmenu", "g-lists-chipmenu"],
+    ],
+  },
+  // D12: the Library rows and the split Copy button.
+  D12: {
+    dir: "docs/v2/design-review/D12",
+    shots: [
+      ["desktop-rows", "g-rows", [1280, 800]],
+      ["splitbutton", "g-split"],
     ],
   },
 };

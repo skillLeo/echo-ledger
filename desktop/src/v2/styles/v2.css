@@ -299,6 +299,14 @@
 }
 .el-source__device > .el-icon > svg { inline-size: var(--el-space-12); block-size: var(--el-space-12); }
 .el-source--sm .el-source__device { display: none; }
+/* SourceMark (D12): the voice note in the app's calm accent, any other source on bg-subtle in secondary, and the device
+   chip 2 px outside the mark with a 2 px ring in the row's background (--row-bg, set by the row as it changes). */
+.el-source--mark.el-source--voice { background: var(--el-role-accent-soft); color: var(--el-role-accent-text); }
+.el-source--mark.el-source--neutral { background: var(--el-role-bg-subtle); color: var(--el-role-text-secondary); }
+.el-source--mark > .el-source__device {
+  box-shadow: inset 0 0 0 var(--el-border-hairline) var(--el-role-border-default), 0 0 0 var(--el-space-2) var(--row-bg, var(--el-role-bg-canvas));
+}
+.el-card { --row-bg: var(--el-role-bg-surface); }
 .el-row__main { flex: 1; min-inline-size: 0; display: flex; flex-direction: column; }
 .el-row__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .el-row__title--strong { font-weight: var(--el-text-body-strong-weight); }
@@ -333,6 +341,78 @@
   white-space: normal; overflow-wrap: break-word;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
 }
+
+/* The indicator slot (any row, D12): unread, pinned, important, then up to 3 label dots, always in that order, in a
+   fixed place between the text and the end column. 16 px glyphs, 8 px dots, 4 px apart; an empty slot isn't drawn. */
+.el-row__slot { flex: none; display: inline-flex; align-items: center; gap: var(--el-space-4); color: var(--el-role-text-secondary); }
+.el-row__ind { display: inline-flex; }
+.el-row__ind--important { color: var(--el-role-warning-default); }
+.el-row__unread {
+  flex: none; inline-size: var(--el-component-status-dot-size); block-size: var(--el-component-status-dot-size);
+  border-radius: var(--el-radius-full); background: var(--el-role-accent-default);
+}
+.el-row__dots { display: inline-flex; align-items: center; gap: var(--el-space-4); }
+
+/* The Library's row (ListRow variant="library", D12): the mark centred on two lines, the title (title.s, strong) over
+   the snippet (body, secondary), the slot, then the date over the length, each line on the text's baseline. 72 high
+   (56 compact), 12 block padding; inset 8 from the list so the 8 radius of hover, focus and selection shows. Cells
+   that are empty take no room, so the gaps are margins, not grid gaps, and each sits on a cell in the row's own
+   direction (the title, the snippet and the times take their own). */
+.el-row--library {
+  --row-pad: var(--el-space-8);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
+  grid-template-rows: auto auto;
+  align-content: center; align-items: baseline;
+  gap: 0;
+  min-block-size: calc(var(--el-space-64) + var(--el-space-8));
+  padding-block: var(--el-space-12);
+  padding-inline: var(--row-pad);
+  margin-inline: var(--el-space-8);
+  border-radius: var(--el-radius-md);
+}
+.el-row--library.el-row--compact { min-block-size: calc(var(--el-space-48) + var(--el-space-8)); padding-block: var(--el-space-4); }
+.el-row--library > .el-row__main, .el-row--library > .el-row__end { display: contents; }
+.el-row--library > .el-row__lead { grid-column: 1; grid-row: 1 / span 2; align-self: center; display: flex; margin-inline-end: var(--el-space-16); }
+.el-row--library > .el-row__lead > .el-row__pick { align-self: center; margin-inline-end: var(--el-space-8); }
+.el-row--library .el-row__title {
+  grid-column: 2; grid-row: 1;
+  font-size: var(--el-text-title-s-size); line-height: var(--el-text-title-s-line); font-weight: var(--el-text-title-s-weight);
+  color: var(--el-role-text-primary);
+}
+.el-row--library .el-row__meta {
+  grid-column: 2; grid-row: 2;
+  font-size: var(--el-text-body-size); line-height: var(--el-text-body-line);
+}
+.el-row--library > .el-row__slot { grid-column: 3; grid-row: 1 / span 2; align-self: center; margin-inline-start: var(--el-space-12); }
+.el-row--library .el-row__end-top, .el-row--library .el-row__end-bottom {
+  justify-self: end; margin-inline-start: var(--el-space-12); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.el-row--library .el-row__end-top { grid-column: 4; grid-row: 1; }
+.el-row--library .el-row__end-bottom { grid-column: 4; grid-row: 2; }
+/* One face for the date and the length: a caller's numeric face (.el-num) takes the row's face here. */
+.el-row--library .el-row__end .el-num { font: inherit; }
+.el-row--library > .el-row__actions { grid-column: 5; grid-row: 1 / span 2; align-self: center; margin-inline-start: var(--el-space-4); }
+.el-row--library > :is(.el-row__value, .el-row__control, .el-row__chevron) { grid-column: 6; grid-row: 1 / span 2; align-self: center; margin-inline-start: var(--el-space-8); }
+/* Urdu takes its taller line. */
+:lang(ur) .el-row--library .el-row__title { line-height: var(--el-text-urdu-body-line); }
+:lang(ur) .el-row--library .el-row__meta { font-size: var(--el-text-urdu-body-size); line-height: var(--el-text-urdu-body-line); }
+/* A hairline between rows, from where the text starts (8 + 40 + 16 inside the row, 72 from the list's edge); none after
+   a section's last row, and none next to a row that is hovered, focused or selected. */
+.el-row--library + .el-row--library::before {
+  content: ""; position: absolute; pointer-events: none;
+  inset-block-start: 0;
+  inset-inline-start: calc(var(--row-pad) + var(--el-space-40) + var(--el-space-16));
+  inset-inline-end: var(--row-pad);
+  border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+/* With a pick box before the mark, the hairline still starts where the text does. */
+.el-row--library.el-row--pick + .el-row--library.el-row--pick::before { inset-inline-start: calc(var(--row-pad) + var(--el-space-16) + var(--el-space-8) + var(--el-space-40) + var(--el-space-16)); }
+.el-row--library:is(.el-row--interactive:hover, .el-row--selected, :has(> .el-row__hit:focus-visible))::before,
+.el-row--library:is(.el-row--interactive:hover, .el-row--selected, :has(> .el-row__hit:focus-visible)) + .el-row--library::before { border-color: transparent; }
+.el-row--library.el-row--interactive:hover, .el-row--library:has(> .el-row__hit:focus-visible) { background: var(--el-role-bg-subtle); --row-bg: var(--el-role-bg-subtle); }
+.el-row--library.el-row--selected { background: var(--el-role-accent-soft); --row-bg: var(--el-role-accent-soft); }
 
 /* ---- Chip and FilterBar ------------------------------------------------------------------------------------- */
 .el-filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
@@ -1002,6 +1082,23 @@ button.el-step__head { cursor: pointer; }
 .el-group__head { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
 .el-health-list { margin: 0; padding: 0; list-style: none; }
 .el-group__note { padding: 0 var(--el-space-12) var(--el-space-12); }
+/* The app's one details style (UX-10): "Learn more" under a group, "Text on the screen" in the screen viewer. A quiet
+   accent line with the app's end chevron (directional, so it flips in RTL), turned down when open, in place of the
+   browser's triangle. The paragraphs are spaced from tokens. */
+.el-more > summary {
+  display: inline-flex; align-items: center; gap: var(--el-space-4);
+  padding-inline-end: var(--el-space-4); list-style: none; cursor: pointer; color: var(--el-role-accent-text);
+  border-radius: var(--el-radius-sm);
+}
+.el-more > summary::-webkit-details-marker { display: none; }
+.el-more > summary > .el-icon { transition: transform var(--el-motion-fast); }
+.el-more[open] > summary > .el-icon { transform: rotate(90deg); }
+[dir="rtl"] .el-more[open] > summary > .el-icon { transform: rotate(-90deg); }
+.el-more > summary:hover { text-decoration: underline; }
+.el-more > summary:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
+.el-more > p { margin: var(--el-space-8) 0 0; }
+.el-more[open] > summary + p { margin-block-start: var(--el-space-12); }
+@media (prefers-reduced-motion: reduce) { .el-more > summary > .el-icon { transition: none; } }
 .el-home-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--el-space-12); padding: var(--el-space-16); }
 .el-home-check { flex-direction: column; gap: var(--el-space-2); }
 .el-home-empty { padding-block-start: var(--el-space-12); }
@@ -1139,8 +1236,7 @@ button.el-step__head { cursor: pointer; }
 .el-screen-viewer__wait { inline-size: 100%; block-size: calc(var(--el-space-64) * 4); }
 .el-screen-viewer__said { display: grid; gap: var(--el-space-4); }
 .el-said { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--el-space-4); }
-.el-screen-viewer__text summary { cursor: pointer; color: var(--el-role-text-secondary); }
-.el-screen-viewer__text p { margin-block-start: var(--el-space-8); white-space: pre-wrap; overflow-wrap: anywhere; }
+.el-screen-viewer__text > p { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Help (v1.8 P6.4): the guides, a guide to read, what's new, contact support. */
 .el-help { display: grid; gap: var(--el-space-16); }
@@ -2256,6 +2352,13 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
   padding: var(--el-space-4) var(--el-space-8); border-radius: var(--el-radius-sm);
   background: var(--el-role-text-primary); color: var(--el-role-bg-canvas); box-shadow: var(--el-shadow-1);
   font-size: var(--el-desktop-text-small-size); line-height: var(--el-desktop-text-small-line);
+}
+/* Urdu: Nastaliq rises far above and falls below a 16 px line (D-260: the rail's tooltips lost their tops), so a tooltip
+   in Urdu takes urdu.caption (14/28), never smaller, as the other small text does, and more room on top, where a
+   Nastaliq line beside Latin (a key: "Ctrl+2") reaches highest (measured: scripts/tipNastaliq.mjs). English keeps 12/16. */
+:lang(ur) .el-tip {
+  font-size: var(--el-text-urdu-caption-size); line-height: var(--el-text-urdu-caption-line);
+  padding-block: var(--el-space-8) var(--el-space-4);
 }
 
 /* ---- UX-20: the title row (TitleRow.tsx) ---------------------------------------------------------------------------
