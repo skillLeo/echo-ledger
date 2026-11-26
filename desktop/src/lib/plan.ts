@@ -2,6 +2,7 @@
 // "Workspaces, roles and privacy"). The core reads them from GET /api/config (AppStatus.plan).
 import type { AppStatus, PlanInfo, WorkspaceRole } from "./ipc";
 import { fileSize } from "./format";
+import { wordsIn, type Lang } from "../i18n";
 
 export const ROLE_LABEL: Record<WorkspaceRole, string> = { owner: "Owner", admin: "Admin", member: "Member", viewer: "Viewer" };
 
@@ -36,8 +37,15 @@ export function percentUsed(used: number | null, limit: number | null): number |
   return Math.min(100, Math.max(0, Math.round(((used ?? 0) / limit) * 100)));
 }
 
-/** A project's Notes when the plan leaves out `ai_notes` (the core's sentence for `feature_not_in_plan`). */
-export const NO_AI_NOTES = "Call notes, memory and Ask are not in your workspace's plan. The workspace owner can change the plan in the console.";
+/**
+ * A project's Notes when the plan leaves out `ai_notes` (the core's sentence for `feature_not_in_plan`), in the window's
+ * language or `lang`.
+ */
+export function noAiNotes(lang?: Lang): string {
+  return wordsIn(lang).t("Call notes, memory and Ask are not in your workspace's plan. The workspace owner can change the plan in the console.");
+}
+/** Its English (classic's project page). */
+export const NO_AI_NOTES = noAiNotes("en");
 
 /** The plan's features by name, for the account page: what is in the plan and what is not. */
 export function planFeatures(plan: PlanInfo): [string, boolean][] {

@@ -1771,16 +1771,18 @@ body.dragging-views, body.dragging-views * { cursor: grabbing !important; user-s
 .el-segment:has(+ .el-segment--cont) { border-block-end-color: transparent; }
 
 /* The Record page's recording section: the state with its controls and levels, captions and voice notes side by side,
-   the drop card and the uploads waiting to retry. */
+   the drop card and the uploads waiting to retry. Each card keeps its words off its border (16, as the status strip):
+   Nastaliq's first letter reaches past the start of its line. The state's card is el-record__current: el-record__now
+   is the rail's Record button (its padding and border are none). */
 .el-record { display: flex; flex-direction: column; gap: var(--el-space-12); }
-.el-record__now { display: flex; flex-direction: column; gap: var(--el-space-12); }
+.el-record__current { display: flex; flex-direction: column; gap: var(--el-space-12); padding: var(--el-space-16); }
 .el-record__controls, .el-record__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
 .el-record__meters { display: grid; gap: var(--el-space-8); }
 .el-rec-level { display: flex; align-items: center; gap: var(--el-space-12); }
 .el-rec-level__label { inline-size: var(--el-space-48); flex: none; color: var(--el-role-text-secondary); }
 .el-rec-level .el-meter { flex: 1; }
 .el-record__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 4), 1fr)); gap: var(--el-space-12); }
-.el-record__card, .el-record__drop, .el-record__errors { display: flex; flex-direction: column; gap: var(--el-space-8); align-items: flex-start; }
+.el-record__card, .el-record__drop, .el-record__errors { display: flex; flex-direction: column; gap: var(--el-space-8); align-items: flex-start; padding: var(--el-space-16); }
 .el-record__drop { border-style: dashed; }
 .el-record__error-list { margin: 0; padding-inline-start: var(--el-space-16); display: grid; gap: var(--el-space-4); }
 

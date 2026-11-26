@@ -13,6 +13,7 @@ import { RulesSection } from "./FilingRules";
 import { ShareDialog } from "./ShareDialog";
 import { RequestLinksSheet } from "./RequestLinks";
 import { NO_TARGET, type Notify } from "../../lib/notice";
+import { useLanguage, wordsIn, type Lang } from "../../i18n";
 
 /** What a project's page in the new look needs from the Projects page: the project, where it sits, its folders, the
  * project menu (whose dialogs this page keeps showing) and Share. */
@@ -45,13 +46,17 @@ type Dialog =
   | { kind: "share"; project: ClientFolder; start: "link" | "send" }
   | { kind: "requests"; projectId: string | null; focusId: string | null };
 
-/** "Deleted Acme · 12 recordings moved to the Inbox · 2 folders moved up". */
-export function deletedText(name: string, answer: { moved_sessions?: number; moved_projects?: number }): string {
-  const parts = [`Deleted ${name}`];
+/**
+ * "Deleted Acme · 12 recordings moved to the Inbox · 2 folders moved up": in `lang` (the window's language when left
+ * out; the classic page passes "en"), the project's name as it is.
+ */
+export function deletedText(name: string, answer: { moved_sessions?: number; moved_projects?: number }, lang?: Lang): string {
+  const { t, tc } = wordsIn(lang);
+  const parts = [t("Deleted :name", { name })];
   const sessions = answer.moved_sessions ?? 0;
   const folders = answer.moved_projects ?? 0;
-  if (sessions > 0) parts.push(`${sessions} recording${sessions === 1 ? "" : "s"} moved to the Inbox`);
-  if (folders > 0) parts.push(`${folders} folder${folders === 1 ? "" : "s"} moved up`);
+  if (sessions > 0) parts.push(tc(":count recording moved to the Inbox|:count recordings moved to the Inbox", sessions));
+  if (folders > 0) parts.push(tc(":count folder moved up|:count folders moved up", folders));
   return parts.join(" · ");
 }
 
@@ -108,6 +113,11 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   /** The new design's name dialog (New project, New folder inside, Rename) in place of this page's. */
   renderNameDialog?: ((props: Parameters<typeof NameDialog>[0]) => ReactNode) | null;
 }) {
+  // The new design (it renders this page's list, a project's page or the name dialog) shows these dialogs' words, the
+  // project menu and the notices in the window's language; the classic page keeps its English in every window.
+  useLanguage();
+  const words: Lang | undefined = renderNameDialog || renderPage || renderList ? undefined : "en";
+  const { t } = wordsIn(words);
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const handledRequest = useRef(0);
@@ -154,7 +164,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       if (parentId && !expanded.has(parentId)) onToggle(parentId);
       close();
       onOpenProject(data.id);
-      notify(parentId ? `${data.name} added to ${projectLabel(list, parentId)}` : `${data.name} added`, false, { kind: "project", id: data.id });
+      notify(parentId ? t(":name added to :project", { name: data.name, project: projectLabel(list, parentId) }) : t(":name added", { name: data.name }), false, { kind: "project", id: data.id });
       void onReload();
       return true;
     } catch (e) {
@@ -167,7 +177,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       const { data } = await api.updateClient(target.id, { name });
       onChanged((all) => all.map((c) => (c.id === target.id ? { ...c, ...data, name: data?.name ?? name } : c)));
       close();
-      notify("Renamed", false, { kind: "project", id: target.id });
+      notify(t("Renamed"), false, { kind: "project", id: target.id });
       void onReload();
       return true;
     } catch (e) {
@@ -180,7 +190,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       await api.updateClient(target.id, { parent_id: parentId });
       onChanged((all) => all.map((c) => (c.id === target.id ? { ...c, parent_id: parentId } : c)));
       close();
-      notify(parentId ? `Moved ${target.name} into ${projectLabel(list, parentId)}` : `Moved ${target.name} to the top level`, false, { kind: "project", id: target.id });
+      notify(parentId ? t("Moved :name into :project", { name: target.name, project: projectLabel(list, parentId) }) : t("Moved :name to the top level", { name: target.name }), false, { kind: "project", id: target.id });
       if (parentId && !expanded.has(parentId)) onToggle(parentId);
       void onReload();
       return true;
@@ -193,7 +203,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   const dropMove = async (ids: string[], target: string | null) => {
     try {
       await moveRecordings(ids, target);
-      notify(movedText(ids.length, items.find((i) => i.id === ids[0])?.title, list, target), false, target ? { kind: "project", id: target } : { kind: "library", folder: "inbox" });
+      notify(movedText(ids.length, items.find((i) => i.id === ids[0])?.title, list, target, words), false, target ? { kind: "project", id: target } : { kind: "library", folder: "inbox" });
       void onReload();
     } catch (e) {
       notify(errorMessage(e), true);
@@ -205,7 +215,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       onChanged((all) => all.filter((c) => c.id !== target.id).map((c) => (c.parent_id === target.id ? { ...c, parent_id: target.parent_id ?? null } : c)));
       close();
       onOpenProject(target.parent_id ?? null);
-      notify(deletedText(target.name, answer ?? {}), false, (answer?.moved_sessions ?? 0) > 0 ? { kind: "library", folder: "inbox" } : NO_TARGET);
+      notify(deletedText(target.name, answer ?? {}, words), false, (answer?.moved_sessions ?? 0) > 0 ? { kind: "library", folder: "inbox" } : NO_TARGET);
       void onReload();
       return true;
     } catch (e) {
@@ -217,11 +227,12 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   const dialogs = dialog && (
     <>
       {dialog.kind === "new" && (
-        <NameDialogSwitch render={renderNameDialog} title={dialog.parentId ? `New folder in ${projectLabel(list, dialog.parentId)}` : "New project"} submitLabel={dialog.parentId ? "Add folder" : "Add project"}
-          hint={dialog.parentId ? "A folder keeps some of the project's recordings and files apart. It has its own notes and Ask." : "A project keeps its calls, files, a brief and notes together, and Ask answers from all of them."}
+        <NameDialogSwitch render={renderNameDialog} title={dialog.parentId ? t("New folder in :project", { project: projectLabel(list, dialog.parentId) }) : t("New project")}
+          submitLabel={dialog.parentId ? t("Add folder") : t("Add project")}
+          hint={dialog.parentId ? t("A folder keeps some of the project's recordings and files apart. It has its own notes and Ask.") : t("A project keeps its calls, files, a brief and notes together, and Ask answers from all of them.")}
           onSubmit={(name) => create(name, dialog.parentId)} onClose={close} />
       )}
-      {dialog.kind === "rename" && <NameDialogSwitch render={renderNameDialog} title={`Rename ${dialog.project.name}`} initial={dialog.project.name} submitLabel="Rename" onSubmit={(name) => rename(dialog.project, name)} onClose={close} />}
+      {dialog.kind === "rename" && <NameDialogSwitch render={renderNameDialog} title={t("Rename :name", { name: dialog.project.name })} initial={dialog.project.name} submitLabel={t("Rename")} onSubmit={(name) => rename(dialog.project, name)} onClose={close} />}
       {dialog.kind === "move" && <MoveProjectDialog project={dialog.project} projects={list} onMove={(parentId) => move(dialog.project, parentId)} onClose={close} />}
       {dialog.kind === "delete" && (
         <DeleteProjectDialog project={dialog.project} recordings={Math.max(dialog.project.session_count ?? 0, items.filter((i) => !i.deleted && i.client?.id === dialog.project.id).length)}
@@ -236,13 +247,13 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   if (project) {
     const requestItem = { label: "Request files into it…", onPick: () => (onRequestLink ? onRequestLink(project.id) : setDialog({ kind: "requests", projectId: project.id, focusId: null })) };
     const menu = [
-      nested && canAddSubfolder(list, project.id) && { label: "New folder inside", onPick: () => setDialog({ kind: "new", parentId: project.id }) },
-      { label: "Rename", onPick: () => setDialog({ kind: "rename", project }) },
-      nested && { label: "Move…", onPick: () => setDialog({ kind: "move", project }) },
-      nested && { label: "Share link…", onPick: () => setDialog({ kind: "share", project, start: "link" }) },
-      nested && { label: "Send to a teammate…", onPick: () => setDialog({ kind: "share", project, start: "send" }) },
+      nested && canAddSubfolder(list, project.id) && { label: t("New folder inside"), onPick: () => setDialog({ kind: "new", parentId: project.id }) },
+      { label: t("Rename"), onPick: () => setDialog({ kind: "rename", project }) },
+      nested && { label: t("Move…"), onPick: () => setDialog({ kind: "move", project }) },
+      nested && { label: t("Share link…"), onPick: () => setDialog({ kind: "share", project, start: "link" }) },
+      nested && { label: t("Send to a teammate…"), onPick: () => setDialog({ kind: "share", project, start: "send" }) },
       requests && requestItem,
-      nested && { label: "Delete project…", danger: true, onPick: () => setDialog({ kind: "delete", project }) },
+      nested && { label: t("Delete project…"), danger: true, onPick: () => setDialog({ kind: "delete", project }) },
     ];
     const share = nested && (
       <button type="button" className="btn" onClick={() => setDialog({ kind: "share", project, start: "link" })} title="A link to the project's recordings, or send it to a teammate">

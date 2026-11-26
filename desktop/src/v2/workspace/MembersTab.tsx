@@ -3,12 +3,13 @@
 // the teammates it was sent to (docs/API.md "Sending to a teammate": they open it, read-only and kept current, until you
 // stop sharing), and for a folder the teammates the projects it sits in were sent to, as a send holds its folders; and
 // whoever its open share links let in. Its links are listed with how often they were viewed. Share opens the share
-// sheet at Share link; Send to a teammate…, at Send to a teammate.
+// sheet at Share link; Send to a teammate…, at Send to a teammate. Its words are the window's language (D-261); people's
+// names and emails and the project's name are their own.
 import { useEffect, useState } from "react";
 import { api, errorMessage, type SentItem, type ShareLink } from "../../lib/ipc";
-// The sharing words in English (lang "en"), as the rest of this tab is until it is in the account's language.
 import { audienceText, viewsText } from "../../lib/sharing";
 import { formatWhen } from "../../lib/format";
+import { isolate, isRtl, lineDir, t, useLanguage } from "../../i18n";
 import { useAccount } from "../../views/main/AccountSettings";
 import { Avatar, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow } from "../components";
 import { initials } from "../settings/initials";
@@ -28,13 +29,19 @@ export function memberRows(links: readonly ShareLink[], sent: readonly Sent[]): 
     people.set(key, row);
   };
   for (const { item, from } of sent) {
-    add(item.to?.email ?? null, item.to?.name ?? null, from ? `Sent with ${from.name} · can open it until you stop sharing` : "Sent to them · can open it until you stop sharing");
+    add(item.to?.email ?? null, item.to?.name ?? null, from ? t("Sent with :name · can open it until you stop sharing", { name: from.name }) : t("Sent to them · can open it until you stop sharing"));
   }
   for (const link of links.filter((l) => l.active && l.audience === "people")) {
-    for (const email of link.people ?? []) add(email, null, "Through a share link");
+    for (const email of link.people ?? []) add(email, null, t("Through a share link"));
   }
-  return [...people.entries()].map(([key, p]) => ({ key, who: p.who, email: p.who !== p.email ? p.email : null, how: p.ways.join("; ") }));
+  return [...people.entries()].map(([key, p]) => ({ key, who: p.who, email: p.who !== p.email ? p.email : null, how: p.ways.join(t("workspace_context.ways_separator")) }));
 }
+
+/** An email before the app's words: in its own isolate in a right-to-left line. */
+const own = (value: string) => (isRtl() ? isolate(value) : value);
+
+/** A line of the app's own words around a name, read in its own words' direction (dir="auto" in English, as before). */
+const Said = ({ children }: { children: string }) => <span dir={lineDir(children)}>{children}</span>;
 
 export function MembersTab({ projectId, projectName, within = [], onShare, onSend }: {
   projectId: string;
@@ -44,6 +51,7 @@ export function MembersTab({ projectId, projectName, within = [], onShare, onSen
   onShare?: () => void;
   onSend?: () => void;
 }) {
+  useLanguage();
   const [links, setLinks] = useState<ShareLink[] | "legacy" | null>(null);
   const [sent, setSent] = useState<Sent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,45 +73,44 @@ export function MembersTab({ projectId, projectName, within = [], onShare, onSen
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, parents, attempt]);
   if (error) {
-    return <EmptyState tone="error" icon={Icons.ErrorIcon} title="Who can open it didn't load" body={error} action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />;
+    return <EmptyState tone="error" icon={Icons.ErrorIcon} title={t("Who can open it didn't load")} body={error} action={<Button onClick={() => setAttempt((n) => n + 1)}>{t("Try again")}</Button>} />;
   }
   if (links === null || sent === null) {
-    return <Loading label="Loading who can open it"><Card><div className="el-group__rows"><SkeletonRow end={false} /><SkeletonRow end={false} /></div></Card></Loading>;
+    return <Loading label={t("Loading who can open it")}><Card><div className="el-group__rows"><SkeletonRow end={false} /><SkeletonRow end={false} /></div></Card></Loading>;
   }
   const open = links === "legacy" ? [] : links.filter((l) => l.active);
   const people = memberRows(open, sent);
   const anyone = open.filter((l) => l.audience !== "people");
   const shared = people.length > 0 || open.length > 0;
   const me = account?.name || account?.email || "";
+  const note = links === "legacy" && !sent.length ? t("Sharing a project needs a newer EchoLedger server.")
+    : shared ? t("Only you and these can open :name. Change who can from Share.", { name: projectName })
+      : t("Only you can open :name: a project is private until you share it, even in a team.", { name: projectName });
   return (
-    <div className="el-workspace-tab" aria-label="Members">
+    <div className="el-workspace-tab" aria-label={t("Members")}>
       <section className="el-group" aria-labelledby="el-members-title">
-        <h2 className="el-caption el-body-strong el-group__title" id="el-members-title">Who can open it</h2>
+        <h2 className="el-caption el-body-strong el-group__title" id="el-members-title">{t("Who can open it")}</h2>
         <Card>
-          <List label="Members" className="el-group__rows">
-            <ListRow compact title={<span dir="auto">{me ? `${me} (you)` : "You"}</span>} meta="Created by you"
+          <List label={t("Members")} className="el-group__rows">
+            <ListRow compact title={<Said>{me ? t(":name (you)", { name: me }) : t("You")}</Said>} meta={t("Created by you")}
               leading={<Avatar initials={initials(account?.name ?? "", account?.email ?? "")} size="sm" seed={account?.email ?? "you"} />} />
             {people.map((m) => (
-              <ListRow key={m.key} compact title={<span dir="auto">{m.who}</span>} meta={<span dir="auto">{m.email ? `${m.email} · ${m.how}` : m.how}</span>}
+              <ListRow key={m.key} compact title={<span dir="auto">{m.who}</span>} meta={<Said>{m.email ? `${own(m.email)} · ${m.how}` : m.how}</Said>}
                 leading={<Avatar initials={initials(m.email ? m.who : "", m.email ?? m.who)} size="sm" seed={m.email ?? m.who} />} />
             ))}
-            {anyone.length > 0 && <ListRow compact icon={Icons.LinkIcon} iconStyle="plain" title={audienceText(anyone[0], "en")} meta="Through a share link" />}
+            {anyone.length > 0 && <ListRow compact icon={Icons.LinkIcon} iconStyle="plain" title={audienceText(anyone[0])} meta={t("Through a share link")} />}
           </List>
         </Card>
-        <p className="el-group__note el-caption el-secondary" dir="auto">
-          {links === "legacy" && !sent.length ? "Sharing a project needs a newer EchoLedger server."
-            : shared ? `Only you and these can open ${projectName}. Change who can from Share.`
-              : `Only you can open ${projectName}: a project is private until you share it, even in a team.`}
-        </p>
+        <p className="el-group__note el-caption el-secondary" dir={lineDir(note)}>{note}</p>
       </section>
       {open.length > 0 && (
         <section className="el-group" aria-labelledby="el-members-links">
-          <h2 className="el-caption el-body-strong el-group__title" id="el-members-links">Share links</h2>
+          <h2 className="el-caption el-body-strong el-group__title" id="el-members-links">{t("Share links")}</h2>
           <Card>
-            <List label="Share links" className="el-group__rows">
+            <List label={t("Share links")} className="el-group__rows">
               {open.map((link) => (
-                <ListRow key={link.id} compact icon={Icons.LinkIcon} iconStyle="plain" title={<span dir="auto">{audienceText(link, "en")}</span>}
-                  meta={[viewsText(link, "en"), link.expires_at ? `until ${formatWhen(link.expires_at)}` : null].filter(Boolean).join(" · ")} />
+                <ListRow key={link.id} compact icon={Icons.LinkIcon} iconStyle="plain" title={<Said>{audienceText(link)}</Said>}
+                  meta={[viewsText(link), link.expires_at ? t("until :date", { date: formatWhen(link.expires_at) }) : null].filter(Boolean).join(" · ")} />
               ))}
             </List>
           </Card>
@@ -111,8 +118,8 @@ export function MembersTab({ projectId, projectName, within = [], onShare, onSen
       )}
       {links !== "legacy" && (onShare || onSend) && (
         <div className="el-page__actions el-members__actions">
-          {onShare && <Button icon={Icons.ShareIcon} onClick={onShare}>Share</Button>}
-          {onSend && <Button icon={Icons.SendIcon} title="They can open it, read-only and kept current, until you stop sharing" onClick={onSend}>Send to a teammate…</Button>}
+          {onShare && <Button icon={Icons.ShareIcon} onClick={onShare}>{t("Share")}</Button>}
+          {onSend && <Button icon={Icons.SendIcon} title={t("They can open it, read-only and kept current, until you stop sharing")} onClick={onSend}>{t("Send to a teammate…")}</Button>}
         </div>
       )}
     </div>
