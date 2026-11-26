@@ -191,8 +191,12 @@ export const cutTexts = (page, root, data = []) => page.evaluate(({ root, data }
       const ink = { left: r.left - Math.max(0, m.actualBoundingBoxLeft), right: r.right + Math.max(0, m.actualBoundingBoxRight - m.width), top: r.top + under, bottom: r.bottom - over };
       let scrolled = false;
       let lost = null;
-      for (let e = parent; e && e !== document.documentElement && !scrolled; e = e.parentElement) {
+      let fixedAbove = false;
+      for (let e = parent; e && e !== document.documentElement && !scrolled && !fixedAbove; e = e.parentElement) {
         const es = style(e);
+        // A box fixed to the window (a dialog) isn't clipped by the boxes it sits in, only by its own and the window:
+        // the walk stops after it.
+        fixedAbove = es.position === "fixed";
         // A card (a box with a border) the text sits in, not its own control: ink running into its border is cut by it.
         if (!lost && !(control && control.contains(e)) && edged(es)) {
           const b = clientBox(e);

@@ -228,16 +228,17 @@ try {
         await page.locator('section[aria-labelledby="el-project-screens"]').evaluate((section) => section.scrollIntoView({ block: "start" }));
         await page.waitForTimeout(1200);
         if (wanted("project-screens")) {
-          // Classic's Keep screen moments switch is on the page (D-265: the new design gives it the project's `screens`).
+          // The Keep screen moments switch is on the page (D-265 gives the new design the project's `screens`; D-267 draws it).
           const keep = await page.getByRole("switch", { name: words.keep, exact: true }).isVisible().catch(() => false);
           if (!keep) problems.push(`${label} project-screens: no “${words.keep}” switch`);
           await shot(page, "project-screens", 'section[aria-labelledby="el-project-screens"]', words.more);
         }
         if (wanted("project-screens-viewer")) {
-          await grid.locator("button.screen-thumb").nth(1).click();
-          await page.locator(".screen-viewer").waitFor();
+          // The new design's thumbnails and viewer (D-267).
+          await grid.locator("button.el-screen-thumb").nth(1).click();
+          await page.locator('[role="dialog"] .el-screen-viewer').waitFor();
           await page.waitForTimeout(1200);
-          await shot(page, "project-screens-viewer", ".screen-viewer");
+          await shot(page, "project-screens-viewer", '[role="dialog"]');
         }
         await page.close();
       }

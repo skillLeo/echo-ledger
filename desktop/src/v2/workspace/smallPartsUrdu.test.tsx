@@ -14,6 +14,7 @@ import { formatWhen } from "../../lib/format";
 import { TRANSLATE_FEED, type TranslateFeed } from "../../lib/translate";
 import { BadgeMark, LockedChip, LockedFeatureCard, PlanBadge, useLockedTag } from "../../views/main/Upgrade";
 import { ProjectScreens } from "../../views/main/ScreenMoments";
+import { ProjectScreensV2 } from "./ProjectScreensV2";
 import TranslateOverlayApp from "../../views/translate/TranslateOverlayApp";
 import { LiveV2 } from "../live/LiveV2";
 import { WorkspaceV2 } from "./WorkspaceV2";
@@ -270,6 +271,10 @@ const KEPT = ["Qureshi Textiles", "Kick-off", "The checkout page"];
 const screens = (props: { lang?: Lang; first?: ProjectScreensPage; client?: typeof PROJECT | { id: string; name: string; screens?: boolean } } = {}) => (
   <ProjectScreens client={props.client ?? PROJECT} first={props.first ?? FIRST} notify={vi.fn()} onOpenRecording={vi.fn()} onClientChanged={vi.fn()} lang={props.lang} />
 );
+/** The new design's (D-267), as the project page's Files tab draws it. */
+const screensV2 = (props: { first?: ProjectScreensPage; client?: typeof PROJECT | { id: string; name: string; screens?: boolean } } = {}) => (
+  <ProjectScreensV2 client={props.client ?? PROJECT} first={props.first ?? FIRST} notify={vi.fn()} onOpenRecording={vi.fn()} onClientChanged={vi.fn()} />
+);
 const thumbs = () => within(screen.getByTestId("project-screens")).getAllByRole("listitem").map((item) => item.querySelector("button")!);
 const openViewer = async () => {
   fireEvent.click(thumbs()[1]);
@@ -301,7 +306,8 @@ describe("a project's screens (ProjectScreens): the window's language on the new
     await act(flushAsync);
     const part = screen.getByRole("region", { name: "اس پروجیکٹ کے اسکرین کے لمحات" });
     expect(within(part).getByRole("switch", { name: "اسکرین کے لمحات محفوظ کریں" })).toHaveAttribute("aria-checked", "true");
-    const hint = document.getElementById("screens-keep-c1-hint")!;
+    // The new design's settings row (D-267): the switch's line is the row's meta.
+    const hint = part.querySelector(".el-row__meta-text")!;
     expect(hint.textContent).toBe(`${iso("Qureshi Textiles")} کی میٹنگز کے دوران اسکرین پر جو کچھ تھا، کمپیوٹر ایپ اسے محفوظ رکھتی ہے۔`);
     expect(hint).toHaveAttribute("dir", "rtl");
     const grid = screen.getByTestId("project-screens");
@@ -318,7 +324,7 @@ describe("a project's screens (ProjectScreens): the window's language on the new
     expect(viewer).toHaveAccessibleName(`اسکرین ${iso(2)} · ${iso("14:32")}`);
     expect(within(viewer).getByText(`${iso(3)} میں سے ${iso(2)}`)).toBeInTheDocument();
     // The recording's title in its isolate and when (the date keeps its no-break spaces).
-    const sub = viewer.querySelector(".screen-viewer-title .small")!;
+    const sub = viewer.querySelector(".el-screen-viewer__from")!;
     expect(sub.textContent).toBe(`${iso("Kick-off")} · ${dates[0]}`);
     expect(sub).toHaveAttribute("dir", "rtl");
     for (const name of ["بند کریں", "پچھلی اسکرین", "اگلی اسکرین", "یہاں سے چلائیں"]) expect(within(viewer).getByRole("button", { name })).toBeInTheDocument();
@@ -327,13 +333,18 @@ describe("a project's screens (ProjectScreens): the window's language on the new
 
   it("in Urdu with nothing kept yet, and with the switch off", async () => {
     await urdu();
-    render(screens({ first: { data: [], next_cursor: null }, client: { ...PROJECT, screens: false } }));
-    const empty = screen.getByTestId("screens-empty");
-    expect(within(empty).getByText("ابھی اسکرین کے کوئی لمحات نہیں")).toBeInTheDocument();
-    const line = empty.querySelector("p")!;
+    render(screensV2({ first: { data: [], next_cursor: null }, client: { ...PROJECT, screens: false } }));
+    const empty = screen.getByText("ابھی اسکرین کے کوئی لمحات نہیں").closest(".el-empty")!;
+    const line = empty.querySelector(".el-empty__body > span")!;
     expect(line.textContent).toBe(`جب ${iso("Qureshi Textiles")} کی کوئی میٹنگ کمپیوٹر ایپ پر ریکارڈ ہو تو شیئر کی گئی اسکرین پر جو کچھ تھا وہ یہاں نظر آتا ہے، ٹرانسکرپٹ میں اپنے لمحے کے ساتھ۔`);
     expect(line).toHaveAttribute("dir", "rtl");
-    expect(document.getElementById("screens-keep-c1-hint")!.textContent).toBe(`${iso("Qureshi Textiles")} میں رکھی گئی میٹنگز کی اسکرین سے کچھ محفوظ نہیں ہوتا۔`);
+    const off = `${iso("Qureshi Textiles")} میں رکھی گئی میٹنگز کی اسکرین سے کچھ محفوظ نہیں ہوتا۔`;
+    const part = screen.getByRole("region", { name: "اس پروجیکٹ کے اسکرین کے لمحات" });
+    expect(part.querySelector(".el-row__meta-text")!.textContent).toBe(off);
+    // The switch is described by the same words (its row shows them; assistive tools hear them with the switch).
+    const toggle = within(part).getByRole("switch", { name: "اسکرین کے لمحات محفوظ کریں" });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(toggle).toHaveAccessibleDescription(off);
     expect(wordsOf(document.body).filter((w) => latinIn(w, KEPT))).toEqual([]);
   });
 
@@ -357,19 +368,22 @@ describe("a project's screens (ProjectScreens): the window's language on the new
     expect(urduIn(words(viewer).join(" "))).toBe(false);
   });
 
-  it("English is unchanged: the new page's default says what classic's does", async () => {
+  it("English is unchanged: the new page says what classic's does", async () => {
     await english();
-    const { container } = render(screens());
+    const { container } = render(screensV2());
     await act(flushAsync);
-    expect(document.getElementById("screens-keep-c1-hint")!.textContent).toBe("The desktop keeps what was on screen during Qureshi Textiles's meetings.");
-    expect(screen.getByRole("button", { name: "Screen 1 · 1:00: The checkout page" })).toHaveAttribute("title", "The checkout page");
+    const part = screen.getByRole("region", { name: "Screen moments of this project" });
+    const keeps = "The desktop keeps what was on screen during Qureshi Textiles's meetings.";
+    expect(part.querySelector(".el-row__meta-text")!.textContent).toBe(keeps);
+    expect(within(part).getByRole("switch", { name: "Keep screen moments" })).toHaveAccessibleDescription(keeps);
+    expect(screen.getByRole("button", { name: "Screen 1 · 1:00: The checkout page" })).toBeInTheDocument();
     expect(screen.getByText("Screen 2 · 14:32")).toBeInTheDocument();
     expect(urduIn(wordsOf(container).join(" "))).toBe(false);
     const viewer = await openViewer();
     expect(within(viewer).getByText(/^Kick-off · /)).toBeInTheDocument();
     expect(within(viewer).getByText("2 of 3")).toBeInTheDocument();
     cleanup();
-    render(screens({ first: { data: [], next_cursor: null } }));
+    render(screensV2({ first: { data: [], next_cursor: null } }));
     expect(screen.getByText("No screen moments yet")).toBeInTheDocument();
     expect(screen.getByText("When a meeting of Qureshi Textiles is recorded on the desktop, what was on the shared screen shows here, next to its moment in the transcript.")).toBeInTheDocument();
   });
