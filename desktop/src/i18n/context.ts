@@ -27,4 +27,16 @@ export const CONTEXT_EN: Readonly<Record<string, string>> = {
   "actions_context.menu_find": "Find",
   // The window's Zoom (Window › Zoom) and the avatar's: the size, not the meeting app (ur.json's "Zoom" is the brand).
   "actions_context.zoom": "Zoom",
+  // Between the parts of a name read out (D-253: the rail's "Activity, 3, something failed", the account's, a locked
+  // command's ", Live Translate is in Pro"): Urdu's comma (،) in Urdu.
+  "shell_context.separator": ", ",
+  // Live's dot in the rail, said after its name: a call being recorded, or captions or dictation running (ur.json's
+  // "recording" is the noun, ریکارڈنگ; "On" a switch's).
+  "shell_context.live_recording": "recording",
+  "shell_context.live_on": "on",
+  // Pages in the window's search whose name reads otherwise in the catalogue (D-253): Upload opens the file picker
+  // (ur.json's "Upload" is the verb), the Library's Waiting and No project places (a state, and an empty project field).
+  "palette_context.upload": "Upload",
+  "palette_context.waiting": "Waiting",
+  "palette_context.no_project": "No project",
 };

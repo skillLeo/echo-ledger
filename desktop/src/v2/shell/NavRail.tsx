@@ -1,7 +1,8 @@
 // The three levels of navigation (PLAN_NAV_3_LEVELS §1–§3, §6): the rail of main places (72 px, an icon and a short
 // name under it, always there; DES-01: 56 px items, the selected one's pill, a tooltip with its shortcut), the place's
 // panel of views and collections (⊟ or ⌘\ hides it; in a small window it opens as a flyout from the rail and closes
-// once something is chosen), and the page. The pieces are here; Shell puts them together with the app's state.
+// once something is chosen), and the page. The pieces are here; Shell puts them together with the app's state. The
+// rail's and the panel head's words are the window's language (D-253); the keys read left to right in every language.
 import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button, Icon, Icons, Loading, ResizeEdge, SearchField, Skeleton } from "../components";
 import type { IconType } from "../components/Button";
@@ -10,6 +11,7 @@ import { useTip } from "../components/Tip";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 import { PROJECT_SORTS, projectOrder, useProjectSort } from "./projectSort";
 import { FAILED_WORDS, railBadgeLabel } from "../../lib/badge";
+import { isolate, isRtl, t } from "../../i18n";
 
 /** UX-03: the panel's width, dragged or set from the keyboard, from 200 to 360 px; let go below 160 px it closes. */
 export const PANEL_MIN = 200;
@@ -24,11 +26,22 @@ export const SHOW_PANEL_EVENT = "echoledger:show-panel";
 /** The rail's places, in their order (⌘1…⌘6); Home is the logo's, Record the round button's. */
 export type Place = "library" | "projects" | "live" | "ask" | "activity" | "settings";
 export const RAIL_PLACES: readonly Place[] = ["library", "projects", "live", "ask", "activity", "settings"];
+/** Each place's English name (the catalogue's key); placeName says it in the window's language. */
 export const PLACE_NAMES: Record<Place, string> = {
   library: "Library", projects: "Projects", live: "Live", ask: "Ask", activity: "Activity", settings: "Settings",
 };
+/** A place's name in the window's language (the rail, its tooltips, More's menu, the panel's head). */
+export const placeName = (place: Place) => t(PLACE_NAMES[place]);
+/** A name read out in parts ("Activity, 3, something failed"), joined as the window's language joins them. */
+export const spokenParts = (parts: readonly (string | null | undefined | false)[]) => parts.filter(Boolean).join(t("shell_context.separator"));
+/** "something failed", in the window's language. */
+const failedWords = () => t(FAILED_WORDS);
+/** A shortcut inside words: left to right in every language (⌘1, never 1⌘ after Urdu). */
+const keysIn = (keys: string) => (isRtl() ? isolate(keys) : keys);
 
 const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+/** ⌘\ (Ctrl+\ on Windows): the panel's own key, hiding or closing it. */
+const PANEL_KEYS = `${MAC ? "⌘" : "Ctrl+"}\\`;
 /** ⌘1 on a Mac, Ctrl+1 elsewhere. */
 export const placeKey = (place: Place) => `${MAC ? "⌘" : "Ctrl+"}${RAIL_PLACES.indexOf(place) + 1}`;
 const placeShortcut = (place: Place) => `Meta+${RAIL_PLACES.indexOf(place) + 1} Control+${RAIL_PLACES.indexOf(place) + 1}`;
@@ -52,8 +65,8 @@ export function RailItem({ icon, label, current, onClick, count, countTone, dot,
 }) {
   // Red says something failed: so do the name and the tooltip (UX-08), as colour alone can't.
   const failed = !!count && countTone === "danger";
-  const name = count ? `${label}, ${count}${failed ? `, ${FAILED_WORDS}` : ""}` : dot && dotLabel ? `${label}, ${dotLabel}` : label;
-  const [tipProps, tip] = useTip(`${shortcut ? `${label} ${shortcut}` : label}${failed ? `, ${FAILED_WORDS}` : ""}`);
+  const name = count ? spokenParts([label, String(count), failed && failedWords()]) : dot && dotLabel ? spokenParts([label, dotLabel]) : label;
+  const [tipProps, tip] = useTip(spokenParts([shortcut ? `${label} ${keysIn(shortcut)}` : label, failed && failedWords()]));
   return (
     <>
       <button type="button" className="el-rail__item" aria-current={current ? "page" : undefined} aria-label={name} aria-expanded={expanded}
@@ -71,7 +84,7 @@ export function RailItem({ icon, label, current, onClick, count, countTone, dot,
 }
 
 export function railItemProps(place: Place) {
-  return { label: PLACE_NAMES[place], shortcut: placeKey(place), keys: placeShortcut(place) };
+  return { label: placeName(place), shortcut: placeKey(place), keys: placeShortcut(place) };
 }
 
 /**
@@ -87,16 +100,16 @@ export function railFit(total: number, room: number, each: number): { keep: numb
   return fit < 1 ? { keep: 0, more: false } : { keep: fit - 1, more: true };
 }
 
-/** The places' names as one phrase ("Library, Projects and Activity"). */
+/** The places' names as one phrase ("Library, Projects and Activity"), in the window's language. */
 export function placeList(places: readonly Place[]): string {
-  const names = places.map((p) => PLACE_NAMES[p]);
-  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  const names = places.map(placeName);
+  return names.length < 2 ? names.join("") : t(":list and :last", { list: names.slice(0, -1).join(t("shell_context.separator")), last: names[names.length - 1] });
 }
 
 /** The avatar's tooltip: the account, and the places it holds when not even More fits (UX-07). */
 export function accountTip(held: readonly Place[], failed = false): string {
-  const tip = held.length ? `${placeList(held)}; account, theme and settings` : "Account, theme and settings";
-  return failed ? `${tip}, ${FAILED_WORDS}` : tip;
+  const tip = held.length ? t(":places; account, theme and settings", { places: placeList(held) }) : t("Account, theme and settings");
+  return failed ? spokenParts([tip, failedWords()]) : tip;
 }
 
 /** The places as menu items (More's, or the avatar's when not even More fits), each with its icon, ⌘ key and Activity's
@@ -105,7 +118,7 @@ export function placeMenuItems(places: readonly Place[], current: Place | null, 
   onPick: (place: Place) => void): MenuItem[] {
   const here = !!current && places.includes(current);
   return places.map((p) => ({
-    label: PLACE_NAMES[p], icon: icons[p], shortcut: placeKey(p), count: p === "activity" ? activityCount || undefined : undefined,
+    label: placeName(p), icon: icons[p], shortcut: placeKey(p), count: p === "activity" ? activityCount || undefined : undefined,
     ...(here ? { checked: current === p, radio: true } : {}), onPick: () => onPick(p),
   }));
 }
@@ -125,19 +138,18 @@ export function RailMore({ places, current, icons, activityCount, activityTone, 
   const failed = !!count && activityTone === "danger";
   const dot = !count && places.includes("live") && !!liveDot;
   const here = !!current && places.includes(current);
-  const [tipProps, tip] = useTip(failed ? `More, ${FAILED_WORDS}` : "More");
-  const spoken = ["More", count ? `${PLACE_NAMES.activity} ${count}` : null, failed ? FAILED_WORDS : null,
-    places.includes("live") && liveDot && liveDotWords ? `${PLACE_NAMES.live} ${liveDotWords}` : null]
-    .filter(Boolean).join(", ");
+  const [tipProps, tip] = useTip(failed ? spokenParts([t("More"), failedWords()]) : t("More"));
+  const spoken = spokenParts([t("More"), count ? `${placeName("activity")} ${count}` : null, failed ? failedWords() : null,
+    places.includes("live") && liveDot && liveDotWords ? `${placeName("live")} ${liveDotWords}` : null]);
   const items = placeMenuItems(places, current, icons, activityCount, onPick);
   return (
     <div className="el-rail__more" data-testid="rail-more">
-      <Menu label="More places" items={items} align="start"
+      <Menu label={t("More places")} items={items} align="start"
         button={{ variant: "quiet", className: "el-rail__item", "aria-label": spoken, "aria-current": here ? "page" : undefined, ...tipProps,
           text: <><span className="el-rail__icon"><Icon icon={Icons.MoreIcon} size="md" />
             {count ? <span className={`el-rail__count el-num${failed ? " el-rail__count--danger" : ""}`} data-count={railBadgeLabel(count) ?? undefined} aria-hidden="true" />
               : dot ? <span className="el-rail__dot el-rail__dot--live" aria-hidden="true" /> : null}</span>
-            <span className="el-rail__label" aria-hidden="true">More</span></> }} />
+            <span className="el-rail__label" aria-hidden="true">{t("More")}</span></> }} />
       {tip}
     </div>
   );
@@ -186,7 +198,7 @@ export function PanelToggle() {
   if (!toggle) return null;
   return (
     <span className="el-page__toggle">
-      <Button size="sm" variant="quiet" icon={Icons.SidebarIcon} aria-label={toggle.label} aria-expanded={toggle.expanded} title={`${toggle.label} (${MAC ? "⌃⌘S" : "Ctrl+\\"})`}
+      <Button size="sm" variant="quiet" icon={Icons.SidebarIcon} aria-label={toggle.label} aria-expanded={toggle.expanded} title={`${toggle.label} (${keysIn(MAC ? "⌃⌘S" : "Ctrl+\\")})`}
         aria-keyshortcuts={MAC ? "Control+Meta+S Meta+\\" : "Control+\\"} onClick={(e) => toggle.onToggle(e.currentTarget)} />
     </span>
   );
@@ -235,7 +247,7 @@ export function PlacePanel({ place, menu, onHide, flyout, onClose, children, foo
     window.setTimeout(() => onClose("chose"), 0);
   };
   return (
-    <aside ref={box} className={`el-panel${flyout ? " el-panel--flyout" : ""}`} aria-label={`${PLACE_NAMES[place]} panel`} onClickCapture={chose}
+    <aside ref={box} className={`el-panel${flyout ? " el-panel--flyout" : ""}`} aria-label={t(":place panel", { place: placeName(place) })} onClickCapture={chose}
       style={width ? { ["--el-panel-width" as string]: `${width}px` } : undefined}
       onKeyDown={(e) => {
         if (!flyout || e.key !== "Escape" || e.defaultPrevented) return;
@@ -246,17 +258,18 @@ export function PlacePanel({ place, menu, onHide, flyout, onClose, children, foo
       data-testid="nav-panel">
       {/* The panel's top cell of the title row: its empty part and its name move the window (UX-20). */}
       <div className="el-panel__head" data-tauri-drag-region="deep">
-        <h2 className="el-panel__title">{PLACE_NAMES[place]}</h2>
-        {menu && menu.length > 0 && <Menu label={`More for ${PLACE_NAMES[place]}`} items={menu} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />}
-        {pin && <Button size="sm" variant="quiet" icon={Icons.PinIcon} aria-label={pin.pinned ? "Unpin the panel" : "Pin the panel"} aria-pressed={pin.pinned}
-          title={pin.pinned ? "Unpin: the panel opens over the page in a small window" : "Pin: keep the panel beside the page in a small window"} onClick={pin.onPin} />}
-        <Button size="sm" variant="quiet" icon={Icons.SidebarIcon} aria-label={flyout ? "Close panel" : "Hide panel"} title={`${flyout ? "Close" : "Hide"} panel (${MAC ? "⌘" : "Ctrl+"}\\)`}
+        <h2 className="el-panel__title">{placeName(place)}</h2>
+        {menu && menu.length > 0 && <Menu label={t("More for :name", { name: placeName(place) })} items={menu} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />}
+        {pin && <Button size="sm" variant="quiet" icon={Icons.PinIcon} aria-label={pin.pinned ? t("Unpin the panel") : t("Pin the panel")} aria-pressed={pin.pinned}
+          title={pin.pinned ? t("Unpin: the panel opens over the page in a small window") : t("Pin: keep the panel beside the page in a small window")} onClick={pin.onPin} />}
+        <Button size="sm" variant="quiet" icon={Icons.SidebarIcon} aria-label={flyout ? t("Close panel") : t("Hide panel")}
+          title={flyout ? t("Close panel (:keys)", { keys: PANEL_KEYS }) : t("Hide panel (:keys)", { keys: PANEL_KEYS })}
           aria-keyshortcuts="Meta+\ Control+\" onClick={flyout ? () => onClose("hide") : onHide} />
       </div>
       <div className="el-panel__body">{children}</div>
       {foot && <div className="el-panel__foot">{foot}</div>}
       {resize && (
-        <ResizeEdge label={`Resize the ${PLACE_NAMES[place]} panel`} side="end" cssVar="--el-panel-width" width={resize.width}
+        <ResizeEdge label={t("Resize the :place panel", { place: placeName(place) })} side="end" cssVar="--el-panel-width" width={resize.width}
           min={PANEL_MIN} max={PANEL_MAX} closeBelow={PANEL_CLOSE_BELOW} onWidth={resize.onWidth} onReset={resize.onReset} onClose={resize.onClose} />
       )}
     </aside>

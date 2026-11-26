@@ -82,4 +82,7 @@ export const CONVERTED: readonly string[] = [
   // D-248: the system's right-click menus on a Mac (their words are the registry's and the callers', through t(); the
   // registry, the menu bar and contextMenus.ts keep only key names and the checks' own messages besides).
   "v2/actions/popup.ts",
+  // D-253: Record's split button in the rail (the rail itself, NavRail.tsx, keeps its places' English names as keys and
+  // the Projects panel; NavShell.tsx the rail's "Main", which the pictures' scripts find it by).
+  "v2/shell/RecordSplit.tsx",
 ];

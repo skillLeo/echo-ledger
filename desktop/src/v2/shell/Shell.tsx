@@ -14,6 +14,7 @@ import { NavShell } from "./NavShell";
 import { NoProjectDrop, ProjectsPanel, type Place } from "./NavRail";
 import { setProjectsAccount } from "./kept";
 import { keyboardPoint, useProjectMenu } from "./ProjectMenu";
+import { t } from "../../i18n";
 
 /** How long Record ignores presses when the status never changes (the core said no, or was slow to say). */
 const PRESS_HOLD_MS = 3000;
@@ -404,7 +405,7 @@ function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity
   return (
     <NavShell place={place} onPlace={onPlace} onHome={() => { setOwn(null); onGo("record"); }} status={status} panelFlyout={nav?.panelFlyout} layoutFor={nav?.layoutFor} titleEnd={nav?.titleEnd}
       panels={{ library: library && <>{library}{drops}</>, projects: projectsPanel || undefined, ...nav?.panels }} feet={{ library: footStart, ...nav?.feet }}
-      libraryCount={nav?.libraryCount} activityCount={activity} activityTone={activityTone} liveDot={nav?.liveDot ?? !!recording} liveDotWords={nav?.liveDotWords ?? (recording ? "recording" : undefined)}
+      libraryCount={nav?.libraryCount} activityCount={activity} activityTone={activityTone} liveDot={nav?.liveDot ?? !!recording} liveDotWords={nav?.liveDotWords ?? (recording ? t("shell_context.live_recording") : undefined)}
       setupAttention={nav?.setupAttention ?? status.kind === "setup"} onSetupHealth={onSetup ?? (() => onGo("settings"))} onHelp={onHelp}
       recording={recording} onRecord={onRecord} onUpload={onUpload} onVoiceNote={onVoiceNote} callRecording={nav?.callRecording}
       onSearch={onSearch} searchKeys={searchKeys} me={me} account={nav?.account} uploading={uploading} notices={notices} banners={banners}>
@@ -592,18 +593,18 @@ function ShellSidebar({ tab, onGo, status, me, live, ask, notices, banners, acti
           </div>
         }>
         {/* ● Record: one press records (or stops); its menu has a voice note and the Record page (calls ready, Live
-            Assist), the sheet the phone opens on a long press. */}
-        <div className="el-shell__record" role="group" aria-label="Record" aria-current={current === "record" ? "page" : undefined}>
+            Assist), the sheet the phone opens on a long press. Its words are the window's language (D-253). */}
+        <div className="el-shell__record" role="group" aria-label={t("Record")} aria-current={current === "record" ? "page" : undefined}>
           <Button variant={stops ? "danger" : "primary"} icon={stops ? Icons.StopIcon : Icons.RecordIcon} aria-disabled={pressing ? true : undefined}
-            onKeyDown={(e) => { if (e.repeat) e.preventDefault(); }} onClick={pressRecord}>{stops ? "Stop recording" : "Record"}</Button>
-          <Menu label="More ways to record" button={{ variant: stops ? "danger" : "primary", icon: Icons.ChevronDownIcon }} items={[
-            ...(onRecord ? [{ label: stops ? "Stop recording" : "Record now", icon: stops ? Icons.StopIcon : Icons.RecordIcon, onPick: pressRecord }] : []),
+            onKeyDown={(e) => { if (e.repeat) e.preventDefault(); }} onClick={pressRecord}>{stops ? t("Stop recording") : t("Record")}</Button>
+          <Menu label={t("More ways to record")} button={{ variant: stops ? "danger" : "primary", icon: Icons.ChevronDownIcon }} items={[
+            ...(onRecord ? [{ label: stops ? t("Stop recording") : t("Record now"), icon: stops ? Icons.StopIcon : Icons.RecordIcon, onPick: pressRecord }] : []),
             // Import: files can also be dropped anywhere on the window.
-            ...(onUpload ? [{ label: "Import audio files…", icon: Icons.ShareIcon, onPick: onUpload }] : []),
-            ...(onVoiceNote ? [{ label: "Voice note", icon: Icons.MicIcon, onPick: onVoiceNote }] : []),
-            ...(onNewProject ? [{ label: "New project…", icon: Icons.FolderIcon, group: "Make", onPick: onNewProject }] : []),
-            ...(onRequestLink ? [{ label: "Request link…", icon: Icons.LinkIcon, group: "Make", onPick: onRequestLink }] : []),
-            { label: "Record page", icon: Icons.HomeIcon, onPick: () => go("record") },
+            ...(onUpload ? [{ label: t("Import audio files…"), icon: Icons.ShareIcon, onPick: onUpload }] : []),
+            ...(onVoiceNote ? [{ label: t("Voice note"), icon: Icons.MicIcon, onPick: onVoiceNote }] : []),
+            ...(onNewProject ? [{ label: t("New project…"), icon: Icons.FolderIcon, group: t("Make"), onPick: onNewProject }] : []),
+            ...(onRequestLink ? [{ label: t("Request link…"), icon: Icons.LinkIcon, group: t("Make"), onPick: onRequestLink }] : []),
+            { label: t("Record page"), icon: Icons.HomeIcon, onPick: () => go("record") },
           ]} />
         </div>
         {/* With the Library's sections (PLAN_LIBRARY_FILTERS), Live and Ask stay at the top with Record, the foot stays put, and

@@ -122,6 +122,12 @@ const HELP_GROUP = (() => {
   const group = groupOf("help")!;
   return { title: group.title, entry: entryOf(group) };
 })();
+/**
+ * The Library's places whose name is a page's in the palette but reads otherwise in the catalogue (ur.json's "Waiting"
+ * and "No project" are a state and an empty project field): a key of their own (context.ts).
+ */
+const PLACE_KEYS: Readonly<Record<string, string>> = { waiting: "palette_context.waiting", inbox: "palette_context.no_project" };
+
 /** The pages in words, for a Back link that returns to one ("Library"). */
 const TAB_NAMES: Record<Tab, string> = { record: "Record page", library: "Library", projects: "Projects", activity: "Activity", shared: "Shared", settings: "Settings" };
 /** How long after the library changed the sidebar's project counts are read again (changes come in bursts). */
@@ -1154,19 +1160,21 @@ export default function MainApp() {
   const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status), rail: ui.flags["ui_v2.library"], zoom: ui.flags.v21_zoom, urdu });
   const findSettings = (query: string) => paletteSettings(query, settingsAvailable, openAccount);
   const upgradeOpen = !!openUpgradeRequest(entitlements);
-  // Every page, place, project and Settings page by name, for the window's search (the palette).
+  // Every page, place, project and Settings page by name, for the window's search (the palette), in the window's
+  // language with its English as its name (D-253: found by either); a project's name is its own, in both.
+  const named = (english: string, key: string = english) => ({ label: t(key), name: english });
   const pages: ShellPage[] = [
-    { id: "home", label: "Home", keywords: "record start ready check calls voice note captions", open: () => goTo("record") },
-    { id: "library", label: "Library", keywords: "recordings transcripts all", open: () => openFolder(null) },
+    { id: "home", ...named("Home"), keywords: "record start ready check calls voice note captions", open: () => goTo("record") },
+    { id: "library", ...named("Library"), keywords: "recordings transcripts all", open: () => openFolder(null) },
     // The new design says no "Inbox": recordings in no project are Project › No project.
-    ...places.filter((p) => p.key !== "all").map((p) => ({ id: `place-${p.key}`, label: placeWords(p), group: "Library", keywords: `smart folder recordings${p.key === "inbox" ? " inbox" : ""}`, open: () => openPlace(p) })),
-    { id: "projects", label: "Projects", keywords: "clients folders", open: () => openProject(null) },
-    ...(projects ?? []).map((p) => ({ id: `project-${p.id}`, label: p.name, group: "Projects", keywords: "project client", open: () => openProject(p.id) })),
-    { id: "activity", label: "Activity", keywords: "notifications bell", open: () => goTo("activity") },
-    ...SHARED_TABS.map(([id, label]) => ({ id: `shared-${id}`, label, group: "Shared", keywords: "share links shared", open: () => openShared(id) })),
-    ...(canRecord ? [{ id: "upload", label: "Upload", keywords: "import files audio video", open: () => void pickImport() }] : []),
+    ...places.filter((p) => p.key !== "all").map((p) => ({ id: `place-${p.key}`, ...named(placeWords(p), PLACE_KEYS[p.key] ?? placeWords(p)), group: t("Library"), keywords: `smart folder recordings${p.key === "inbox" ? " inbox" : ""}`, open: () => openPlace(p) })),
+    { id: "projects", ...named("Projects"), keywords: "clients folders", open: () => openProject(null) },
+    ...(projects ?? []).map((p) => ({ id: `project-${p.id}`, label: p.name, name: p.name, group: t("Projects"), keywords: "project client", open: () => openProject(p.id) })),
+    { id: "activity", ...named("Activity"), keywords: "notifications bell", open: () => goTo("activity") },
+    ...SHARED_TABS.map(([id, label]) => ({ id: `shared-${id}`, ...named(label), group: t("Shared"), keywords: "share links shared", open: () => openShared(id) })),
+    ...(canRecord ? [{ id: "upload", ...named("Upload", "palette_context.upload"), keywords: "import files audio video", open: () => void pickImport() }] : []),
     ...palettePages(settingsAvailable, openAccount),
-    { id: "help", label: "Help & shortcuts", keywords: "keys keyboard", open: () => openHelp() },
+    { id: "help", ...named("Help & shortcuts"), keywords: "keys keyboard", open: () => openHelp() },
   ];
   const pageWidth = windowWidth - (collapsed ? SIDEBAR_RAIL : sidebarWidth);
   // While the server holds the queue (v1.6, P2.7) the recordings wait; they are not on their way.
@@ -1448,7 +1456,7 @@ export default function MainApp() {
               onPlace: openNavPlace,
               libraryCount: libraryCounts?.needs || undefined,
               liveDot: !!status.recording || status.captionsLive || status.dictationActive,
-              liveDotWords: status.recording ? "recording" : status.captionsLive || status.dictationActive ? "on" : undefined,
+              liveDotWords: status.recording ? t("shell_context.live_recording") : status.captionsLive || status.dictationActive ? t("shell_context.live_on") : undefined,
               setupAttention: shellChip(status, (app) => sourceAppLabel(app, "en")).kind === "setup",
               callRecording: canRecord ? { on: status.autoMode, toggle: toggleAutoRecord } : undefined,
               account: account ? [
