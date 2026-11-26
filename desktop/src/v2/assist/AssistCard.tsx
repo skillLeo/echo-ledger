@@ -1,18 +1,42 @@
 // The Live Assist card (v1.9 L4): the question in small grey, the first line big and bold, up to three bullets, an
 // optional "Say next" and the language line; the captions strip under it (Them / Me, last two lines); the in-call
 // controls on its top bar. Rendered token by token from the card state (card.ts). The window is the core's: hidden from
-// screen sharing like the other panels, with the privacy badge; [data-hit] marks what stays clickable.
+// screen sharing like the other panels, with the privacy badge; [data-hit] marks what stays clickable. The app's words
+// are in the window's language (D-264); the suggestions, the captions and the consent line (said to the other side,
+// English in every language) are shown as they are.
 import { useState, type ReactNode } from "react";
+import { isRtl, lineDir, t, tc, useLanguage, wordsIn, type Lang } from "../../i18n";
 import { Button, Icons, Progress } from "../components";
-import type { AssistMode, HintLevel, SendKind } from "./adapter";
-import { boldParts, modeLabel, offerQuestion, parseSuggestion, shown, type CardState } from "./card";
+import { CONSENT_LINE, type AssistMode, type HintLevel, type SendKind } from "./adapter";
+import { boldParts, modeLabel, offerQuestion, parseSuggestion, shown, type CardState, type ParsedSuggestion } from "./card";
 
-/** The consent line of the prompt pack (1.0.1), for boss, client and general meetings. */
-export const CONSENT_LINE = "Just so you know: I record this call and use an AI assistant that takes notes and suggests points to me. Is that okay with you?";
-export const INTERVIEW_NOTE = "Check whether this interview allows AI help.";
+export { CONSENT_LINE } from "./adapter";
 
-const HINT_WORDS: Record<HintLevel, string> = { keywords: "Keywords", outline: "Outline", full: "Full answer" };
+/** The reminder for an interview (in place of the consent line), in `lang`: the window's when left out. */
+export function interviewNote(lang?: Lang): string {
+  const { t: say } = wordsIn(lang);
+  return say("Check whether this interview allows AI help.");
+}
+export const INTERVIEW_NOTE = interviewNote("en");
+
+/** A hint level's name, in the window's language. */
+export function hintWords(level: HintLevel): string {
+  switch (level) {
+    case "keywords": return t("Keywords");
+    case "outline": return t("Outline");
+    case "full": return t("Full answer");
+  }
+}
 const NEXT_HINT: Record<HintLevel, HintLevel> = { keywords: "outline", outline: "full", full: "keywords" };
+
+/** The name of the language a suggestion's language line is in, in the window's language. */
+function languageName(label: NonNullable<ParsedSuggestion["language"]>["label"]): string {
+  switch (label) {
+    case "Urdu": return t("Urdu");
+    case "Roman Urdu": return t("Roman Urdu");
+    case "Arabic": return t("Arabic");
+  }
+}
 
 export type AssistCardActions = {
   onSend: (kind: SendKind) => void;
@@ -41,6 +65,8 @@ export function AssistCard({ state, hint, muted, badge, actions }: {
   badge?: ReactNode;
   actions: AssistCardActions;
 }) {
+  const lang = useLanguage();
+  const rtlWindow = isRtl(lang);
   const [noteSeen, setNoteSeen] = useState(false);
   const s = shown(state);
   const parsed = s?.text ? parseSuggestion(s.text) : null;
@@ -49,64 +75,71 @@ export function AssistCard({ state, hint, muted, badge, actions }: {
   const modes = state.allowedModes;
   const nextMode = modes.length > 1 && !captionsOnly ? modes[(modes.indexOf(state.mode as AssistMode) + 1) % modes.length] : null;
   const reminder = noteSeen ? null
-    : state.meetingType === "interview" ? INTERVIEW_NOTE
-      : state.meetingType ? CONSENT_LINE : null;
+    : state.meetingType === "interview" ? "interview"
+      : state.meetingType ? "consent" : null;
   const rtl = parsed?.language && parsed.language.label !== "Roman Urdu";
+  // In a right-to-left window the consent line is still English: in the English face, left to right.
+  const english = rtlWindow ? { lang: "en", dir: "ltr" as const } : {};
+  const offer = state.offer ? offerQuestion(state.offer) : null;
 
   // Only for a start made from this card (its offer): the question needs something to start again.
   const sessionActive = state.sessionActive && state.pendingStart && (
     <div className="el-assist__note" role="alert">
-      <span>{state.sessionActive?.text}</span>
+      <span dir={lineDir(state.sessionActive?.text ?? "")}>{state.sessionActive?.text}</span>
       <Button size="sm" variant="primary" onClick={actions.onEndAndStart}>{state.sessionActive?.action}</Button>
-      <Button size="sm" variant="quiet" onClick={actions.onKeepRunning}>Keep running</Button>
+      <Button size="sm" variant="quiet" onClick={actions.onKeepRunning}>{t("Keep running")}</Button>
     </div>
   );
+  const error = state.error && <p className="el-field__error" role="alert" dir={lineDir(state.error.text)}>{state.error.text}</p>;
   // Before a session: the core's offer for a prepared meeting's call (it never starts by itself).
   if (!state.sessionId) {
     if (!state.offer && !sessionActive && !state.error) return null;
     return (
-      <section className="el-assist el-assist--offer" data-hit aria-label="Live Assist" data-testid="assist-card">
+      <section className="el-assist el-assist--offer" data-hit aria-label={t("Live Assist")} data-testid="assist-card">
         <div className="el-assist__bar">
           <span className="el-assist__budget" />
-          <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Hide the card" onClick={actions.onHide} />
+          <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label={t("Hide the card")} onClick={actions.onHide} />
         </div>
-        {state.offer && (
+        {offer && (
           <div className="el-assist__offer">
-            <p className="el-assist__first" dir="auto">{offerQuestion(state.offer)}</p>
+            <p className="el-assist__first" dir={lineDir(offer)}>{offer}</p>
             <div className="el-assist__actions">
-              <Button size="sm" variant="primary" onClick={actions.onStartOffer}>Start</Button>
-              <Button size="sm" variant="quiet" onClick={actions.onDismissOffer}>Not now</Button>
+              <Button size="sm" variant="primary" onClick={actions.onStartOffer}>{t("Start")}</Button>
+              <Button size="sm" variant="quiet" onClick={actions.onDismissOffer}>{t("Not now")}</Button>
             </div>
           </div>
         )}
         {sessionActive}
-        {state.error && <p className="el-field__error" role="alert">{state.error.text}</p>}
+        {error}
       </section>
     );
   }
 
+  const mode = modeLabel(state.mode);
+  const minutesLeft = state.budget.left != null ? Math.round(state.budget.left / 60) : 0;
   return (
-    <section className="el-assist" data-hit aria-label="Live Assist" data-testid="assist-card">
+    <section className="el-assist" data-hit aria-label={t("Live Assist")} data-testid="assist-card">
       <div className="el-assist__bar" data-tauri-drag-region>
         {badge}
-        <Button size="sm" variant="quiet" disabled={!nextMode} aria-label={`Mode: ${modeLabel(state.mode)}${nextMode ? `. Change to ${modeLabel(nextMode)}` : ""}`}
-          onClick={() => nextMode && actions.onMode(nextMode)}>{modeLabel(state.mode)}</Button>
-        <Button size="sm" variant="quiet" disabled={captionsOnly} aria-label={`Hints: ${HINT_WORDS[hint]}. Change to ${HINT_WORDS[NEXT_HINT[hint]]}`}
-          onClick={() => actions.onHint(NEXT_HINT[hint])}>{HINT_WORDS[hint]}</Button>
-        <Button size="sm" variant="quiet" aria-pressed={muted} disabled={captionsOnly} onClick={actions.onMute}>{muted ? "Muted for 60 s" : "Mute 60 s"}</Button>
+        <Button size="sm" variant="quiet" disabled={!nextMode}
+          aria-label={nextMode ? t("Mode: :mode. Change to :next", { mode, next: modeLabel(nextMode) }) : t("Mode: :mode", { mode })}
+          onClick={() => nextMode && actions.onMode(nextMode)}>{mode}</Button>
+        <Button size="sm" variant="quiet" disabled={captionsOnly} aria-label={t("Hints: :level. Change to :next", { level: hintWords(hint), next: hintWords(NEXT_HINT[hint]) })}
+          onClick={() => actions.onHint(NEXT_HINT[hint])}>{hintWords(hint)}</Button>
+        <Button size="sm" variant="quiet" aria-pressed={muted} disabled={captionsOnly} onClick={actions.onMute}>{muted ? t("Muted for 60 s") : t("Mute 60 s")}</Button>
         {state.budget.left != null && state.budget.total ? (
           <span className="el-assist__budget">
-            <Progress label="Assist time left" value={state.budget.left} max={state.budget.total} valueText={`${Math.round(state.budget.left / 60)} minutes of assist left this month`} />
+            <Progress label={t("Assist time left")} value={state.budget.left} max={state.budget.total} valueText={tc(":count minutes of assist left this month", minutesLeft)} />
           </span>
         ) : <span className="el-assist__budget" />}
-        <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Hide the card" onClick={actions.onHide} />
+        <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label={t("Hide the card")} onClick={actions.onHide} />
       </div>
 
       {reminder && (
         <div className="el-assist__note" role="note">
-          <span>{reminder}</span>
-          {reminder === CONSENT_LINE && <Button size="sm" variant="quiet" onClick={actions.onCopyConsent}>Copy</Button>}
-          <Button size="sm" variant="quiet" onClick={() => setNoteSeen(true)}>OK</Button>
+          {reminder === "consent" ? <span {...english}>{CONSENT_LINE}</span> : <span>{interviewNote()}</span>}
+          {reminder === "consent" && <Button size="sm" variant="quiet" onClick={actions.onCopyConsent}>{t("Copy")}</Button>}
+          <Button size="sm" variant="quiet" onClick={() => setNoteSeen(true)}>{t("OK")}</Button>
         </div>
       )}
       {state.modeNote && <p className="el-assist__mode el-caption" role="status">{state.modeNote}</p>}
@@ -118,40 +151,43 @@ export function AssistCard({ state, hint, muted, badge, actions }: {
           <>
             <p className="el-assist__first" dir="auto"><Bold text={parsed.first} /></p>
             {parsed.bullets.length > 0 && (
-              <ul className="el-assist__bullets">{parsed.bullets.map((b, i) => <li key={i} dir="auto"><Bold text={b} /></li>)}</ul>
+              // In a right-to-left window the list takes its bullets' direction, so an English list keeps its markers inside.
+              <ul className="el-assist__bullets" dir={rtlWindow ? "auto" : undefined}>{parsed.bullets.map((b, i) => <li key={i} dir="auto"><Bold text={b} /></li>)}</ul>
             )}
-            {parsed.sayNext && <p className="el-assist__next" dir="auto"><span className="el-caption">Say next</span> {parsed.sayNext}</p>}
+            {parsed.sayNext && (
+              <p className="el-assist__next" dir="auto"><span className="el-caption">{t("Say next")}</span> {rtlWindow ? <bdi>{parsed.sayNext}</bdi> : parsed.sayNext}</p>
+            )}
             {parsed.language && (
               <p className="el-assist__language" lang={parsed.language.label === "Arabic" ? "ar" : parsed.language.label === "Urdu" ? "ur" : "en"} dir={rtl ? "rtl" : "ltr"}>
-                <span className="el-caption" dir="ltr">{parsed.language.label}</span> {parsed.language.text}
+                <span className="el-caption" {...(rtlWindow ? { lang, dir: "rtl" as const } : { dir: "ltr" as const })}>{languageName(parsed.language.label)}</span> {parsed.language.text}
               </p>
             )}
           </>
         ) : s?.status === "streaming" ? (
-          <p className="el-caption">Writing a suggestion</p>
+          <p className="el-caption">{t("Writing a suggestion")}</p>
         ) : state.skipped ? (
-          <p className="el-caption">No reply needed</p>
+          <p className="el-caption">{t("No reply needed")}</p>
         ) : !state.error ? (
-          <p className="el-caption">Suggestions appear here when they ask you something.</p>
+          <p className="el-caption">{t("Suggestions appear here when they ask you something.")}</p>
         ) : null}
-        {state.error && <p className="el-field__error" role="alert">{state.error.text}</p>}
+        {error}
       </div>
 
       {!captionsOnly && (
         <div className="el-assist__actions">
-          <Button size="sm" variant="primary" onClick={() => actions.onSend("help_now")}>Help me now</Button>
-          <Button size="sm" disabled={!s} onClick={() => actions.onSend("regenerate")}>Regenerate</Button>
-          <Button size="sm" disabled={!s} onClick={() => actions.onSend("shorter")}>Shorter</Button>
-          <Button size="sm" disabled={!s} onClick={() => actions.onSend("formal")}>More formal</Button>
-          <Button size="sm" disabled={!s} onClick={() => actions.onSend("translate")}>Explain in Urdu</Button>
+          <Button size="sm" variant="primary" onClick={() => actions.onSend("help_now")}>{t("Help me now")}</Button>
+          <Button size="sm" disabled={!s} onClick={() => actions.onSend("regenerate")}>{t("Regenerate")}</Button>
+          <Button size="sm" disabled={!s} onClick={() => actions.onSend("shorter")}>{t("Shorter")}</Button>
+          <Button size="sm" disabled={!s} onClick={() => actions.onSend("formal")}>{t("More formal")}</Button>
+          <Button size="sm" disabled={!s} onClick={() => actions.onSend("translate")}>{t("Explain in Urdu")}</Button>
         </div>
       )}
 
       {state.captions.length > 0 && (
-        <ol className="el-assist__captions" aria-label="Captions">
+        <ol className="el-assist__captions" aria-label={t("Captions")}>
           {state.captions.map((c) => (
             <li key={c.turnId} className={c.final ? undefined : "el-assist__partial"}>
-              <span className="el-assist__who">{c.channel === "other" ? "Them" : "Me"}</span> <span dir="auto">{c.text}</span>
+              <span className="el-assist__who">{c.channel === "other" ? t("Them") : t("Me")}</span> <span dir="auto">{c.text}</span>
             </li>
           ))}
         </ol>

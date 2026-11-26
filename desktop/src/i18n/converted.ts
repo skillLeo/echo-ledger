@@ -112,4 +112,11 @@ export const CONVERTED: readonly string[] = [
   "v2/workspace/MembersTab.tsx",
   // and its Ask tab, which is the Ask page too.
   "v2/ask/AskV2.tsx",
+  // D-264: the Live Assist prep screen, and the Live Assist card's window (the card, its words and the window's frame).
+  // adapter.ts keeps the consent line (said to the other side, English in every language) and NOT_HERE, which
+  // failureText says through t().
+  "v2/assist/PrepScreen.tsx",
+  "v2/assist/AssistCard.tsx",
+  "v2/assist/AssistApp.tsx",
+  "v2/assist/card.ts",
 ];
