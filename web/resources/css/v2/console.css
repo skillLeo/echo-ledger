@@ -58,6 +58,7 @@ html[lang='ur'] .v2-sb-label,
 html[lang='ur'] .v2-row-title,
 html[lang='ur'] .v2-row-meta,
 html[lang='ur'] .v2-chip,
+html[lang='ur'] .v2-list-chip,
 html[lang='ur'] .v2-btn,
 html[lang='ur'] .v2-bn-item,
 html[lang='ur'] .v2-status,
@@ -2415,6 +2416,150 @@ html[lang='ur'] .v2-library .v2-row-length {
     .fi-body .el-player .el-tick::after {
         inset: calc(-1 * var(--el-space-16));
     }
+}
+
+/*
+ * Lists (D14, docs/v2/design-review/D14-lists.md): one chip row at the top of the Library: All · Unread · Important ·
+ * the person's lists · +. A list chip is its colour dot (.v2-label-dot--<name>) and its name; the selected chip takes
+ * the accent's tint with a check. The row scrolls sideways under 1280 px and wraps from there.
+ */
+/* The padding keeps the focus ring inside the scroller, which would otherwise cut it; the negative margin gives the
+   room back, as on desktop. */
+.v2-lists {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: calc(var(--el-focus-width) + var(--el-focus-offset));
+    margin: calc(-1 * (var(--el-focus-width) + var(--el-focus-offset)));
+}
+
+@media (min-width: 1280px) {
+    .v2-lists {
+        flex-wrap: wrap;
+        overflow-x: visible;
+    }
+}
+
+/* With a mouse the row keeps a thin scrollbar: the only sign that it scrolls sideways. */
+@media (pointer: fine) {
+    .v2-lists {
+        scrollbar-width: thin;
+    }
+}
+
+.v2-list-chip {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--el-space-8);
+    min-height: var(--el-component-chip-height);
+    padding-inline: var(--el-space-12);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-weight);
+    white-space: nowrap;
+}
+
+.v2-list-chip:hover {
+    background-color: var(--el-role-bg-subtle);
+}
+
+/* The chip being shown: the row shows one list at a time, so it is aria-current, as on desktop. */
+.v2-list-chip[aria-current='true'],
+.v2-list-chip[aria-pressed='true'] {
+    border-color: var(--el-role-accent-default);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-list-chip:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
+}
+
+.v2-list-chip__count {
+    color: var(--el-role-text-secondary);
+    font-weight: var(--el-text-body-weight);
+    font-variant-numeric: tabular-nums;
+}
+
+.v2-list-add {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-component-chip-height);
+    height: var(--el-component-chip-height);
+    padding: 0;
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-secondary);
+    cursor: pointer;
+}
+
+.v2-list-add:hover {
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-primary);
+}
+
+.v2-list-add:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
+}
+
+/* Urdu chips are taller (D4: the Urdu caption line plus room); "+" stays round at the same height. */
+:lang(ur) .v2-list-chip {
+    min-height: calc(var(--el-text-urdu-caption-line) + var(--el-space-8));
+}
+
+:lang(ur) .v2-list-add {
+    width: calc(var(--el-text-urdu-caption-line) + var(--el-space-8));
+    height: calc(var(--el-text-urdu-caption-line) + var(--el-space-8));
+}
+
+/* The eight label colours as one radio group: 32 px dots in 48 px targets, the chosen one ringed and ticked. The ring
+   is an outline with a gap, and the focus ring goes round the whole target, so a chosen dot that has focus shows both. */
+.v2-colour-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--el-space-4);
+}
+
+.v2-colour-picker label {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-layout-control-touch-min);
+    height: var(--el-layout-control-touch-min);
+    cursor: pointer;
+}
+
+.v2-colour-picker input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.v2-colour-picker .v2-label-dot {
+    width: var(--el-space-32);
+    height: var(--el-space-32);
+}
+
+.v2-colour-picker input:checked + .v2-label-dot {
+    outline: var(--el-border-strong) solid var(--el-role-text-primary);
+    outline-offset: var(--el-border-strong);
+}
+
+.v2-colour-picker label:has(input:focus-visible) {
+    border-radius: var(--el-radius-full);
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
 }
 
 /* ================================================================== 4b. the Library's filters and views (2.0.0-p)
