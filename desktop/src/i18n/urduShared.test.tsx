@@ -8,12 +8,12 @@ import { createElement, Fragment } from "react";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { FSI, lineDir, PDI, resetLanguageForTests, RLI, setLanguage } from "./index";
+import { FSI, lineDir, PDI, piecesDir, resetLanguageForTests, RLI, setLanguage } from "./index";
 import { formatWhen, setClock24, whenPart, whenParts } from "../lib/format";
 import { shortWhen } from "../views/main/ActivityCentre";
 import { clientSummary } from "../views/main/ClientAvatar";
 import { rowTime } from "../views/main/LibraryView";
-import { Dialog, ListRow, Toast, ToastRegion } from "../v2/components";
+import { Dialog, ListRow, Sheet, Toast, ToastRegion } from "../v2/components";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const RLM = "\u200F";
@@ -168,6 +168,43 @@ describe("whenParts: one part of a date where a place shows only one, in Urdu ne
     expect(balanced(line)).toBe(true);
     expect(line.endsWith(`${PDI} · 3 folders`)).toBe(true);
     expect(clientSummary(0, at(23, 14))).toBe("No recordings yet");
+  });
+});
+
+describe("D-247: a Dialog's and a Sheet's ×", () => {
+  it("is named Close in the window's language; a caller's own word wins", async () => {
+    const { unmount } = render(<><Dialog open title="Rename" onClose={() => undefined} /><Sheet open title="Request files" onClose={() => undefined} /></>);
+    expect(document.querySelectorAll('[data-close="true"]')).toHaveLength(2);
+    for (const button of document.querySelectorAll('[data-close="true"]')) expect(button).toHaveAttribute("aria-label", "Close");
+    unmount();
+    // The app's own catalogue (this file's other cases run on an empty one).
+    resetLanguageForTests();
+    await act(() => setLanguage("ur", { root: false }));
+    const urduView = render(<><Dialog open title="Rename" onClose={() => undefined} /><Sheet open title="Request files" onClose={() => undefined} /></>);
+    for (const button of document.querySelectorAll('[data-close="true"]')) expect(button).toHaveAttribute("aria-label", "بند کریں");
+    urduView.unmount();
+    render(<Dialog open title="Rename" closeLabel="Dismiss" onClose={() => undefined} />);
+    expect(document.querySelector('[data-close="true"]')).toHaveAttribute("aria-label", "Dismiss");
+  });
+});
+
+describe("D-245: a row's meta line built of pieces", () => {
+  // A time first, then Urdu: dir="auto" took the time's AM for the line's direction and cut the Urdu at its start.
+  const pieced = createElement(Fragment, null, createElement("span", null, "12:52 AM"), " · ", createElement("bdi", null, "Google Meet"), " · آج");
+  it("in Urdu reads right to left; plain text as before (Latin left to right, Urdu right to left, digits auto)", async () => {
+    await urdu();
+    expect(piecesDir(pieced)).toBe("rtl");
+    expect(piecesDir([createElement("mark", { key: "m" }, "invoice"), " was paid"])).toBe("rtl");
+    expect(piecesDir("Payment terms")).toBe("ltr");
+    expect(piecesDir(SENT_BY)).toBe("rtl");
+    expect(piecesDir("3")).toBe("auto");
+    render(<ul><ListRow title="Budget review" meta={pieced} /></ul>);
+    expect(document.querySelector(".el-row__meta-text")).toHaveAttribute("dir", "rtl");
+  });
+  it("in English auto, as always", () => {
+    expect(piecesDir(pieced, "en")).toBe("auto");
+    render(<ul><ListRow title="Budget review" meta={pieced} /></ul>);
+    expect(document.querySelector(".el-row__meta-text")).toHaveAttribute("dir", "auto");
   });
 });
 

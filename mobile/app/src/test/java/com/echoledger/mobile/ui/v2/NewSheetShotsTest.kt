@@ -114,6 +114,7 @@ class NewSheetShotsTest : ScreenTest() {
         for ((d, l, s) in variants) {
             dark = d
             language = l
+            speak(l)
             scale = s
             round++
             compose.waitForIdle()
@@ -158,9 +159,11 @@ class NewSheetShotsTest : ScreenTest() {
             all,
             shoot("$PREFIX-hint") {
                 // Each variant is the app opened again, with the hint not yet shown three times.
-                runBlocking {
-                    app.graph.settings.update { it.copy(appOpens = it.appOpens + 1, recordHintShows = 0, recordHintDone = false) }
-                }
+                // Through the view model with the main thread pumped (a blocking write on the main thread could wait
+                // for the shell's own, which go on the main thread, and never end).
+                val opens = vm.settings.value.appOpens + 1
+                vm.updateSettings { it.copy(appOpens = opens, recordHintShows = 0, recordHintDone = false) }
+                com.echoledger.mobile.testsupport.pumpUntil("opened again") { vm.settings.value.appOpens >= opens }
                 val hint = androidx.compose.ui.test.SemanticsMatcher.expectValue(
                     com.echoledger.mobile.ui.v2.shell.RecordHintText,
                     words(R.string.v2_rs_hint)

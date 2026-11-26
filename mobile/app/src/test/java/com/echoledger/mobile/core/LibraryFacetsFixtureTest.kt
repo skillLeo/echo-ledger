@@ -83,7 +83,11 @@ class LibraryFacetsFixtureTest {
             ),
             updatedAt = r.str("started_at"),
             endedAt = r.strOrNull("ended_at"),
-            facets = if (withFacets) ItemFacetsDto(facets.str("source"), facets.str("status"), facets.str("language")) else null,
+            facets = if (withFacets) {
+                ItemFacetsDto(facets.str("source"), facets.str("status"), facets.str("language"), state = facets.strOrNull("state"))
+            } else {
+                null
+            },
             processingSince = r.strOrNull("processing_since")
         )
     }
@@ -104,6 +108,27 @@ class LibraryFacetsFixtureTest {
         )
         // The phone's own Needs you adds nothing the server has (none of its own here).
         assertEquals(expected.getValue("needs_you").jsonPrimitive.intOrNull, LibraryFacets.needsYouCount(facts, emptyList()))
+    }
+
+    /**
+     * Contract 2.0.0-z: recording 41 (over, ended_at) and 42 (no end, started the day before) are waiting at the file's
+     * now, with the server's state and by the rule alone, and Needs you counts as the server does without the state.
+     */
+    @Test
+    fun theCallsOverAreWaitingAtTheFilesNowWithTheServersStateAndByTheRuleAlone() {
+        val calls = recordings.filter { it.str("id").endsWith("41") || it.str("id").endsWith("42") }.sortedBy { it.str("id") }
+        val (over, old) = calls.map { item(it, withFacets = true) }
+        assertEquals(listOf("recording", "recording"), listOf(over.status, old.status))
+        assertEquals(listOf(true, false), listOf(over.endedAt != null, old.endedAt != null))
+        assertEquals(listOf("waiting", "waiting"), listOf(over.facets?.state, old.facets?.state))
+        assertEquals(listOf("waiting", "waiting"), listOf(LibraryFacets.needsReason(over, now), LibraryFacets.needsReason(old, now)))
+        val ruleOnly = calls.map { item(it, withFacets = false) }
+        assertEquals(listOf("waiting", "waiting"), ruleOnly.map { LibraryFacets.needsReason(it, now) })
+        val byRule = LibraryFacets.prepare(recordings.map { item(it, withFacets = false) }, projects, zone, now)
+        assertEquals(
+            fixture.getValue("library_counts").jsonObject.getValue("needs_you").jsonPrimitive.intOrNull,
+            LibraryFacets.needsYouCount(byRule, emptyList())
+        )
     }
 
     @Test
