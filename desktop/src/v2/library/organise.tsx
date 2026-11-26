@@ -129,8 +129,8 @@ export function aiHeader(item: LibraryItem, people: readonly string[], view: Tra
   const language = view ? viewName(view, "en") : item.language_chip || item.language;
   return [
     `# ${item.title?.trim() || english("Recording")}`,
-    // The time is formatTime's: "3:42 pm", or "15:42" with the 24-hour clock (Latin digits in every language).
-    [item.started_at ? `${englishDate(item.started_at)}, ${formatTime(new Date(item.started_at))}` : null, source, item.duration_ms ? formatDuration(item.duration_ms) : null].filter(Boolean).join(" · "),
+    // The time is formatTime's English: "3:42 pm", or "15:42" with the 24-hour clock (Latin digits in every language).
+    [item.started_at ? `${englishDate(item.started_at)}, ${formatTime(new Date(item.started_at), "en")}` : null, source, item.duration_ms ? formatDuration(item.duration_ms) : null].filter(Boolean).join(" · "),
     people.length ? english("People: :people", { people: people.join(", ") }) : null,
     language ? english("Language: :language", { language }) : null,
   ].filter(Boolean).join("\n");

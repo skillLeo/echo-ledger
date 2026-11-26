@@ -20,6 +20,9 @@ export const CONVERTED: readonly string[] = [
   // and what the new design opens with them: the share sheet (the recording page's Share) and a project's filing rules.
   "views/main/ShareDialog.tsx",
   "v2/workspace/Rules.tsx",
+  // D-259: the All projects page (its cards, the tree, the name dialog) and the app's two message regions' names.
+  "v2/workspace/ProjectsListV2.tsx",
+  "v2/shell/AppToast.tsx",
   // D3a: Settings' pages, their rows and frame, the home with the account card, in the new look (the groups' words are
   // translated where they are shown: groups.ts keeps them as English ids; the registry's words are D3b's).
   "v2/settings/AccountCard.tsx",

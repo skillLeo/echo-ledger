@@ -27,9 +27,9 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 const iso = (value: string | number) => `${FSI}${value}${PDI}`;
 /**
  * formatWhen in Urdu (lib/format): one right-to-left run (RLI … PDI) of the day (آج, کل, "23 نومبر") and then the time,
- * each in its own isolate, the time's space one that doesn't break ("4:05 PM" never split).
+ * each in its own isolate, the time's spaces ones that don't break ("سہ پہر 4:05" never split).
  */
-const URDU_WHEN = /^\u2067\u2068[^\u2069]+\u2069 · \u2068\d{1,2}:\d{2}\u00A0[^\s\u2069]+\u2069\u2069$/;
+const URDU_WHEN = /^\u2067\u2068[^\u2069]+\u2069 · \u2068[^\s\u2069]+(\u00A0[^\s\u2069\d]+)?\u00A0\d{1,2}:\d{2}\u2069\u2069$/;
 /** The innermost element in `within` whose whole text is `text` (getByText would read a no-break space as a space). */
 const withText = (within: Element, text: string) => [...within.querySelectorAll("span, p")].reverse().find((el) => el.textContent === text) ?? null;
 /** No right-to-left mark anywhere: a line takes its direction from its own words (lineDir), not from a mark. */
@@ -129,7 +129,7 @@ describe("Shared in Urdu", () => {
     expect(meta.textContent).toBe(`${iso("Imran")} کی بھیجی ہوئی ریکارڈنگ · ${formatWhen(at)} · “${iso("Please check the totals")}”`);
     // The date in order: yesterday (کل) and then the time, whole.
     expect(formatWhen(at)).toMatch(URDU_WHEN);
-    expect(formatWhen(at)).toBe(`${RLI}${iso("کل")} · ${FSI}4:05\u00A0PM${PDI}${PDI}`);
+    expect(formatWhen(at)).toBe(`${RLI}${iso("کل")} · ${FSI}سہ\u00A0پہر\u00A04:05${PDI}${PDI}`);
     expect(meta.textContent).not.toMatch(NO_MARK);
     expect(row("Weekly sync")).toHaveTextContent(`${iso("sara@acme.pk")} کی بھیجی ہوئی ریکارڈنگ`);
     expect(row("Weekly sync")).toHaveTextContent("محفوظ کیا");

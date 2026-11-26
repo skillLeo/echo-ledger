@@ -123,9 +123,9 @@ describe("the share sheet in Urdu (the recording page's Share)", () => {
     const rows = within(screen.getByRole("list", { name: "شیئر لنکس" })).getAllByRole("listitem");
     expect(rows[0]).toHaveTextContent(`صرف ${iso("ana@example.com")}`);
     expect(rows[0]).toHaveTextContent(/^.*فعال · .+ کو بنا · .+ کو بند ہو گا · ڈاؤن لوڈ کی اجازت ہے/);
-    // Each date is formatWhen's own run (its day, then its time whole), isolated in the line: never "PM 11:59".
+    // Each date is formatWhen's own run (its day, then its time whole), isolated in the line: its part of the day, then the clock.
     expect(rows[0].textContent).toContain(`${iso(formatWhen(LINK.created_at))} کو بنا · ${iso(formatWhen(LINK.expires_at!))} کو بند ہو گا`);
-    expect(formatWhen(LINK.expires_at!)).toMatch(/^\u2067\u2068[^\u2069]+\u2069 · \u2068\d{1,2}:\d{2}\u00A0[^\s\u2069]+\u2069\u2069$/);
+    expect(formatWhen(LINK.expires_at!)).toMatch(/^\u2067\u2068[^\u2069]+\u2069 · \u2068[^\s\u2069]+(\u00A0[^\s\u2069\d]+)?\u00A0\d{1,2}:\d{2}\u2069\u2069$/);
     expect(rows[0]).toHaveTextContent(`${iso(`${iso(3)} بار دیکھا گیا`)} · آخری بار`);
     expect(rows[1]).toHaveTextContent("واپس لیا گیا · ");
     expect(rows[1]).toHaveTextContent("کو بند ہو گیا · صرف پڑھیں اور سنیں");
