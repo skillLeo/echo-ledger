@@ -20,10 +20,11 @@ const mac = () => currentPlatform() === "macos";
 
 /**
  * Its items for one project: only what something here can run and what fits (a right-click menu, `context`), with no
- * keys (a right-click menu on a Mac shows none).
+ * keys (a right-click menu on a Mac shows none). In English, as the projects' pages are (they aren't in the account's
+ * language yet), in an Urdu window too.
  */
 export const projectItems = (ctx: ActionContext) =>
-  menuItems(PROJECT_MENU.filter((id) => id === "-" || canRun(id, ctx.kind)), { ...ctx, context: true })
+  menuItems(PROJECT_MENU.filter((id) => id === "-" || canRun(id, ctx.kind)), { ...ctx, context: true, lang: "en" })
     .map((i) => ({ ...i, shortcut: undefined }));
 
 /** The menu for one project, and what opens it at a point (the pointer) or under an element (the keyboard). */

@@ -168,7 +168,8 @@ export function paletteCommands(status: AppStatus, actions: {
   const list: PaletteCommand[] = [
     recording
       ? { id: "stop", ...said("Stop recording"), keywords: "end finish save", run: () => actions.run(api.stopRecording) }
-      : { id: "start", ...said(actions.v2 ? "Record" : "Record now"), keywords: "record now start recording call meeting voice note begin", run: () => actions.run(api.recordNow) },
+      // The new design's Record is the verb here (ریکارڈ کریں), not the rail's place (ریکارڈ): a key of its own.
+      : { id: "start", ...(actions.v2 ? { label: t("palette_context.record"), name: "Record" } : said("Record now")), keywords: "record now start recording call meeting voice note begin", run: () => actions.run(api.recordNow) },
   ];
   if (recording) {
     list.push(status.paused
@@ -212,10 +213,12 @@ export function paletteCommands(status: AppStatus, actions: {
 }
 
 /**
- * The words a locked command's row says to a screen reader after its name (", Live Translate is in Pro"): the plan's
- * name as it is, or "a paid plan" when the answer names none.
+ * The words a locked command's row says to a screen reader after its name (", Live Translate is in Pro"): the feature's
+ * name in the window's language where the catalogue has it (the server's names are English: "Team workspace" is ٹیم
+ * ورک اسپیس), else as the server wrote it; the plan's name as it is, or "a paid plan" when the answer names none.
  */
-export function lockedWords(feature: string, plan: string | null | undefined): string {
+export function lockedWords(name: string, plan: string | null | undefined): string {
+  const feature = t(name);
   const placed = plan === null || plan === undefined ? t(":feature is in a paid plan", { feature }) : t(":feature is in :plan", { feature, plan });
   return `${t("shell_context.separator")}${placed}`;
 }

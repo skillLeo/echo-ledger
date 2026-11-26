@@ -87,15 +87,11 @@ sealed interface ProfileState {
 }
 
 /**
- * Two initials for a Latin name, the first letter for an Urdu or Arabic one; empty when there is no name, and
+ * A person's initials by the phone's one rule, the web's ([com.echoledger.mobile.core.PersonInitials], P-126): the first
+ * and the last word's first letter, two Urdu or Arabic letters kept apart by a ZWNJ; empty when there is no name, and
  * [PersonAvatar] then shows the person icon.
  */
-fun initialsOf(name: String?): String {
-    val words = name.orEmpty().split(' ').filter { it.isNotBlank() }
-    if (words.isEmpty()) return ""
-    val latin = words.first().first().let { it in 'A'..'Z' || it in 'a'..'z' }
-    return (if (latin) words.take(2) else words.take(1)).joinToString("") { it.take(1) }.uppercase()
-}
+fun initialsOf(name: String?): String = com.echoledger.mobile.core.PersonInitials.of(name)
 
 fun profileOf(account: AccountDto?, storage: StorageDto?, plan: com.echoledger.mobile.core.PlanState): Profile = Profile(
     name = account?.name,

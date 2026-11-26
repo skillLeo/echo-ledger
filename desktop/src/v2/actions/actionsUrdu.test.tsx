@@ -11,8 +11,10 @@ import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../..
 import { makeItem, makeStatus } from "../../test/fixtures";
 import { LibraryV2 } from "../library/LibraryV2";
 import { LibraryNav } from "../library/LibraryNav";
+import { ActivityV2 } from "../activity/ActivityV2";
+import { PROJECT_MENU, useProjectMenu } from "../shell/ProjectMenu";
 import { CommandPalette, emptyLine, goToLine } from "../../views/main/CommandPalette";
-import { ACTIONS, actionLabel, checkMenu, menuItems, registerAction, type ActionContext } from "./registry";
+import { ACTIONS, actionLabel, checkMenu, menuItems, nativeItems, registerAction, type ActionContext } from "./registry";
 import { menuBarModel, type NativeEntry } from "./menuBar";
 import { MENU_BAR_SETTLE_MS, useMenuBar } from "./useMenuBar";
 import { listenToMenuPicks, setMenuPart } from "./menuState";
@@ -30,8 +32,13 @@ const NOW = new Date(2026, 10, 24, 15, 0);
 const iso = (value: string | number) => `${FSI}${value}${PDI}`;
 const mac: ActionContext = { platform: "macos" };
 const win: ActionContext = { platform: "windows" };
-/** Latin letters, but in the names kept as they are (EchoLedger): what an Urdu label must not have. */
-const latinIn = (words: string) => /[A-Za-z]/.test(words.split("EchoLedger").join(""));
+/**
+ * The names kept as they are inside Urdu (decision 30, terms-7): the app's, the brands' and the plans'. The longer
+ * names first, so "WhatsApp Business" goes whole.
+ */
+const KEPT = ["WhatsApp Business", "WhatsApp Web", "WhatsApp", "EchoLedger", "Google", "Meet", "Zoom", "Teams", "Groq", "Ultra", "Pro", "Free"];
+/** Latin letters, but in the kept names: what an Urdu label must not have. */
+const latinIn = (words: string) => /[A-Za-z]/.test(KEPT.reduce((rest, name) => rest.split(name).join(""), words));
 /** Any Arabic-script letter, or an isolate mark: what an English line must not have. */
 const URDU_OR_ISOLATE = /[؀-ۿ⁦-⁩]/;
 const setPlatform = (platform: string) => Object.defineProperty(navigator, "platform", { value: platform, configurable: true });
@@ -102,7 +109,7 @@ describe("a command's words (actionLabel) in Urdu", () => {
     expect(actionLabel("edit.undo", { ...mac, state: { undoWhat: "Move to trash" } })).toBe("واپس کریں");
   });
 
-  it("every label and other state's words of actions.json is in the catalogue, in Urdu, with no Latin but EchoLedger", async () => {
+  it("every label and other state's words of actions.json is in the catalogue, in Urdu, with no Latin but the kept names", async () => {
     const keys = ur as Record<string, string>;
     await urdu();
     const missing: string[] = [];
@@ -116,6 +123,9 @@ describe("a command's words (actionLabel) in Urdu", () => {
     }
     expect(missing.filter((words) => words !== "Zoom")).toEqual([]);
     expect(latin).toEqual([]);
+    // A kept name stays Latin inside the Urdu (terms-7); any other Latin word is still caught.
+    expect(actionLabel("file.sendToWhatsApp", win)).toBe("WhatsApp پر بھیجیں…");
+    expect([latinIn("WhatsApp Business پر بھیجیں"), latinIn("Pro پلان"), latinIn("Labels"), latinIn("نیا Label")]).toEqual([false, false, true, true]);
     // The keys of their own are context keys, English as before.
     expect(CONTEXT_EN["actions_context.zoom"]).toBe("Zoom");
   });
@@ -270,11 +280,44 @@ describe("the Mac menu bar in Urdu", () => {
     // The titled sub-menus: Edit › Find, View › Transcript › Script, View › Theme.
     const titled = all.filter((e): e is Extract<NativeEntry, { kind: "submenu" }> => e.kind === "submenu" && !e.action).map((e) => e.label);
     expect(titled).toEqual(["تلاش", "ٹرانسکرپٹ", "رسم الخط", "تھیم"]);
-    const words = all.flatMap((e) => (e.kind === "item" || e.kind === "submenu" ? [e.label] : []));
+    // macOS's own items carry their words too (the core may draw them with them), in Urdu, the system's action kept.
+    const natives = all.filter((e): e is Extract<NativeEntry, { kind: "native" }> => e.kind === "native");
+    expect(Object.fromEntries(natives.map((e) => [e.native, e.label]))).toEqual({
+      about: "EchoLedger کی معلومات", services: "سروسز", hide: "EchoLedger چھپائیں", hideOthers: "باقی ایپس چھپائیں", showAll: "سب دکھائیں",
+      closeWindow: "ونڈو بند کریں", undo: "واپس کریں", redo: "دوبارہ کریں", cut: "کاٹیں", copy: "کاپی", paste: "پیسٹ کریں", selectAll: "سب منتخب کریں",
+      fullscreen: "پوری اسکرین پر دکھائیں", minimize: "کم سے کم کریں", maximize: "زوم", bringAllToFront: "سب سامنے لائیں",
+    });
+    const words = all.flatMap((e) => (e.kind === "item" || e.kind === "submenu" || e.kind === "native" ? [e.label] : []));
     expect(words.filter(latinIn)).toEqual([]);
     // A command the core runs keeps both its words in Urdu for when there is no page.
     const pause = all.find((e) => e.kind === "item" && e.action === "live.pauseRecording") as { core: { off: string; on: string } };
     expect(pause.core).toMatchObject({ off: "ریکارڈنگ روکیں", on: "ریکارڈنگ جاری رکھیں" });
+  });
+
+  it("in English macOS's own items carry the Mac's Title Case; what the core draws has its & written && (one & drawn), the page's menus keep one", () => {
+    const bar = menuBarModel({ platform: "macos", state: { fullScreen: true } }, { "recording.labels": [{ value: "rd", label: "R&D" }] });
+    const all: NativeEntry[] = [];
+    const walk = (items: readonly NativeEntry[]) => items.forEach((e) => { all.push(e); if (e.kind === "submenu") walk(e.items); });
+    bar.menus.forEach((m) => walk(m.items));
+    const native = (name: string) => (all.find((e) => e.kind === "native" && e.native === name) as { label: string }).label;
+    expect(["about", "hideOthers", "showAll", "undo", "selectAll", "closeWindow", "fullscreen", "maximize", "bringAllToFront"].map(native))
+      .toEqual(["About EchoLedger", "Hide Others", "Show All", "Undo", "Select All", "Close Window", "Exit Full Screen", "Zoom", "Bring All to Front"]);
+    const label = (action: string) => all.filter((e) => (e.kind === "item" || e.kind === "submenu") && e.action === action).map((e) => (e as { label: string }).label);
+    expect([...label("app.accountPlan"), ...label("help.setupHealth"), ...label("live.autoRecord")]).toEqual(["Account && Plan…", "Setup && Health…", "Auto-record Calls && Meetings"]);
+    // A choice of the page's (a label's name) too, and every word the core draws: no single & is left.
+    expect(label("recording.labels")).toEqual(["Labels", "R&&D"]);
+    const words = [...bar.menus.map((m) => m.title), ...all.flatMap((e) => (e.kind === "separator" ? [] : [e.label]))];
+    expect(words.filter((w) => /(^|[^&])&([^&]|$)/.test(w))).toEqual([]);
+    // A right-click menu the system draws: its title, its items and its sub-menu's choices.
+    const popup = nativeItems([
+      { action: "live.autoRecord", label: "Auto-record Calls & Meetings", checked: true },
+      { action: "recording.moveToProject", label: "Move to Project", items: [{ action: "recording.moveToProject", choice: "p1", label: "R&D" }] },
+    ], "Q&A");
+    expect(popup.map((i) => i.label)).toEqual(["Q&&A", undefined, "Auto-record Calls && Meetings", "Move to Project"]);
+    expect(popup[3].items!.map((i) => i.label)).toEqual(["R&&D"]);
+    // The page's own menus show the words as they are.
+    expect(actionLabel("app.accountPlan", mac)).toBe("Account & Plan…");
+    expect(menuItems(["live.autoRecord"], win).map((i) => i.label)).toEqual(["Auto-record calls & meetings"]);
   });
 
   describe("drawn again when the language changes", () => {
@@ -313,6 +356,63 @@ describe("the Mac menu bar in Urdu", () => {
       expect(newRecording()).toBe("New Recording");
       setMenuPart("typing", null);
     });
+  });
+});
+
+describe("screens still in English open English menus in an Urdu window", () => {
+  const offs: (() => void)[] = [];
+  afterEach(() => {
+    offs.splice(0).forEach((off) => off());
+  });
+  const words = (menu: HTMLElement) => [...menu.querySelectorAll('[role^="menuitem"]')].map((m) => m.querySelector(".el-menu__label")?.textContent ?? "");
+  type Line = { action: string | null; label?: string };
+  const popupWords = (n = 0) => ((callsOf("native_menu_popup")[n] as { items: Line[] }).items).map((i) => i.label ?? "—");
+
+  const activity = async () => {
+    respond("pending_list", []);
+    respond("skipped_list", []);
+    respond("upload_list", []);
+    respond("recovered_sessions", []);
+    respond("activity_list", { data: [{ id: "n2", kind: "transcript_ready", title: "Transcript ready", body: "Acme kickoff", session_id: "s1", read: false, at: new Date(2026, 10, 24, 9).toISOString() }], unread_count: 1 });
+    render(<ActivityV2 status={makeStatus()} onOpenRecording={vi.fn()} onReview={vi.fn()} onFailed={vi.fn()} onItems={vi.fn()} say={vi.fn()} />);
+    await act(flushAsync);
+    return screen.getByText("Transcript ready").closest("li") as HTMLElement;
+  };
+
+  it("Activity (English, not yet in Urdu): an item's right-click menu in English, on Windows and on a Mac", async () => {
+    await urdu();
+    fireEvent.contextMenu(await activity(), { clientX: 20, clientY: 30 });
+    const menu = screen.getByRole("menu");
+    expect(words(menu)).toEqual(["Open", "Mark as read"]);
+    expect(menu.textContent).not.toMatch(URDU_OR_ISOLATE);
+    cleanup();
+    setPlatform("MacIntel");
+    respond("native_menu_popup", null);
+    fireEvent.contextMenu(await activity(), { clientX: 20, clientY: 30 });
+    await act(flushAsync);
+    expect(popupWords()).toEqual(["Open", "Mark as Read"]);
+  });
+
+  function Projects() {
+    const { openAt, view } = useProjectMenu();
+    return <><button type="button" onClick={() => openAt({ id: "m", name: "Mehran Foods" }, { x: 40, y: 100 })}>Mehran Foods</button>{view}</>;
+  }
+
+  it("a project's menu in the panel (English, not yet in Urdu): English, on Windows and on a Mac (its & written && for the core)", async () => {
+    offs.push(...PROJECT_MENU.filter((id) => id !== "-").map((id) => registerAction(id, () => undefined)));
+    await urdu();
+    render(<Projects />);
+    fireEvent.click(screen.getByRole("button", { name: "Mehran Foods" }));
+    const menu = screen.getByRole("menu", { name: "Mehran Foods" });
+    expect(words(menu)).toEqual(["Open", "Pin", "Rename…", "Instructions & memory…", "Request files…", "Members…", "Archive", "Delete project…"]);
+    expect(menu.textContent).not.toMatch(URDU_OR_ISOLATE);
+    cleanup();
+    setPlatform("MacIntel");
+    respond("native_menu_popup", null);
+    render(<Projects />);
+    fireEvent.click(screen.getByRole("button", { name: "Mehran Foods" }));
+    await act(flushAsync);
+    expect(popupWords()).toEqual(["Open", "Pin", "—", "Rename…", "Instructions && Memory…", "Request Files…", "Members…", "—", "Archive", "—", "Delete Project…"]);
   });
 });
 

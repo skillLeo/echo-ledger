@@ -26,6 +26,7 @@ import detectRs from "../../src-tauri/src/detect/mod.rs?raw";
 import geometryRs from "../../src-tauri/src/overlay/geometry.rs?raw";
 import shortcutsRs from "../../src-tauri/src/shortcuts.rs?raw";
 import { SHORTCUT_ACTIONS } from "./settingsRegistry";
+import { UI_FLAG_NAMES } from "../v2/flags";
 import modelsRs from "../../src-tauri/src/net/models.rs?raw";
 import captionsRs from "../../src-tauri/src/stt/captions.rs?raw";
 
@@ -426,6 +427,15 @@ describe("wire types", () => {
     }
     // The lists come as the server sends them, `{data: [...]}`, which the window reads.
     expect(rustFields(rustSourceDeclaring("struct", "DataList"), "DataList", false)).toEqual(["data"]);
+  });
+
+  it("D-250: the flags the window reads are exactly the ones the core passes on (ui_flags::KNOWN): none is always off", () => {
+    const source = Object.values(allRustSources).find((text) => text.includes("pub const KNOWN: [&str;"));
+    if (!source) throw new Error("no Rust source declares pub const KNOWN");
+    const list = balanced(source, source.indexOf("pub const KNOWN: [&str;") + "pub const KNOWN: [&str;".length, "[", "]");
+    const known = [...list.replace(/\/\/.*$/gm, "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(sorted(known)).toEqual(sorted([...UI_FLAG_NAMES]));
+    expect(known).toContain("v21_urdu");
   });
 
   it("an Activity item's person has the fields the Rust model reads (2.0.0-aa)", () => {

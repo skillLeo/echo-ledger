@@ -125,7 +125,7 @@ describe("the recording page in Urdu", () => {
     Object.assign(navigator, { clipboard: { writeText } });
     await open(call({ client: ACME }));
     const bar = screen.getByRole("toolbar", { name: "شیئر، کاپی اور ایکسپورٹ" });
-    expect(within(bar).getByRole("button", { name: "واٹس ایپ پر بھیجیں…" })).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "WhatsApp پر بھیجیں…" })).toBeInTheDocument();
     expect(within(bar).getByRole("button", { name: /ایکسپورٹ/ })).toHaveAttribute("title", "PDF (پرنٹ) آپ کے براؤزر میں پرنٹ والا صفحہ کھولتا ہے: وہاں Save as PDF چنیں۔");
     fireEvent.click(within(bar).getByRole("button", { name: "متن کاپی کریں" }));
     await act(flushAsync);
@@ -391,7 +391,7 @@ describe("the organise dialogs in Urdu, with their messages", () => {
 
   it("Send to WhatsApp: the three ways and what each sends", async () => {
     render(<WhatsAppDialog item={makeItem("a")} text="Hello" hasAudio onClose={vi.fn()} say={say} />);
-    const dialog = screen.getByRole("dialog", { name: "واٹس ایپ پر بھیجیں" });
+    const dialog = screen.getByRole("dialog", { name: "WhatsApp پر بھیجیں" });
     expect(within(dialog).getAllByRole("button").map((b) => b.textContent)).toEqual(expect.arrayContaining(["صرف متن", "متن اور آواز", "لنک (7 دن تک چلے گا)", "منسوخ کریں"]));
     expect(dialog).toHaveTextContent("جس کے پاس یہ لنک ہو، وہ 7 دن تک پڑھ اور سن سکتا ہے۔");
   });

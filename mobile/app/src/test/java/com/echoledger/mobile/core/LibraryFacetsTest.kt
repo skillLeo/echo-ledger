@@ -280,4 +280,40 @@ class LibraryFacetsTest {
         assertEquals(listOf("d", "c", "a"), facts.single().values.getValue(FilterSection.PROJECT))
         assertTrue(facts.single().matches(LibraryFacets.searchWords("acme old")))
     }
+
+    /** Contract 2.0.0-z: a call is waiting only once it is over (ended_at) or started more than 4 hours ago. */
+    @Test
+    fun aCallIsWaitingOnlyOnceItIsOverNeverWhileItIsBeingRecorded() {
+        fun ago(seconds: Long) = now.minusSeconds(seconds).toString()
+        fun call(startedAt: String, endedAt: String? = null, state: String? = null) = LibraryItem(
+            id = "live",
+            title = "Call",
+            startedAt = startedAt,
+            status = "recording",
+            sourceApp = "zoom",
+            updatedAt = startedAt,
+            endedAt = endedAt,
+            facets = ItemFacetsDto("zoom", "processing", "unknown", "meeting", state)
+        )
+        // A call still being recorded (no end, started 3 minutes ago) needs nothing yet, and Needs you doesn't count it.
+        val live = call(ago(3 * 60))
+        assertEquals(null, LibraryFacets.needsReason(live, now))
+        val facts = LibraryFacets.prepare(listOf(live), emptyList(), zone, now)
+        assertEquals(false, facts.single().waiting)
+        assertEquals(0, LibraryFacets.needsYouCount(facts, emptyList()))
+        // Once its end is sent, it is.
+        assertEquals("waiting", LibraryFacets.needsReason(call(ago(3 * 60), endedAt = ago(60)), now))
+        // Without an end: exactly 4 hours is not yet, 4 hours and a second is.
+        assertEquals(null, LibraryFacets.needsReason(call(ago(4 * 3600)), now))
+        assertEquals("waiting", LibraryFacets.needsReason(call(ago(4 * 3600 + 1)), now))
+        // The server's "waiting" counts at once; a state it sent earlier never stops the clock (the sync keeps a live
+        // call's "waiting_to_upload" past 4 hours).
+        assertEquals("waiting", LibraryFacets.needsReason(call(ago(60), state = "waiting"), now))
+        assertEquals(null, LibraryFacets.needsReason(call(ago(60), state = "waiting_to_upload"), now))
+        assertEquals("waiting", LibraryFacets.needsReason(call(ago(4 * 3600 + 1), state = "waiting_to_upload"), now))
+        // Classic's Waiting view agrees.
+        val at = now.atZone(zone)
+        assertEquals(false, Organise.inView(live, SmartView.WAITING, at))
+        assertEquals(true, Organise.inView(call(ago(3 * 60), endedAt = ago(60)), SmartView.WAITING, at))
+    }
 }

@@ -39,11 +39,12 @@ object Organise {
         }
         val day = now.toLocalDate().atStartOfDay(now.zone)
         val week = now.toLocalDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).atStartOfDay(now.zone)
+        // Waiting (contract 2.0.0-z): a call over and waiting for its choice, never one still being recorded.
         return when (view) {
             SmartView.ALL -> true
             SmartView.TODAY -> started != null && !started.isBefore(day.toInstant()) && started.isBefore(day.plusDays(1).toInstant())
             SmartView.THIS_WEEK -> started != null && !started.isBefore(week.toInstant()) && started.isBefore(week.plusWeeks(1).toInstant())
-            SmartView.WAITING -> item.status == "recording"
+            SmartView.WAITING -> LibraryFacets.isWaiting(item, now.toInstant())
             SmartView.BOOKMARKED -> item.markerCount > 0
             SmartView.FAILED -> item.status == "failed" || item.transcript?.finalStatus == "failed"
             SmartView.PINNED -> item.pinned

@@ -3,9 +3,13 @@
 // they are shown. A row's right-click menu; the selection bar's ⋮ (More); a label's menu with its Colour ›; the
 // recording page's ⋮; the ⌘K search with Urdu results. A Mac draws its right-click menus itself (a native menu, which a
 // browser can't show): here the page's own menu stands in for it, with the same words (Urdu as written, no Title Case,
-// no shortcuts). It checks that the window reads right to left, that each scene shows its Urdu, that the menus' keys
-// read left to right, and that no menu item is cut; it saves docs/design/screens/desktop/urdu-d248/<platform>-<step>.png
-// (light) and <platform>-<step>-dark.png, and fails when a check doesn't hold.
+// no shortcuts). It checks that the window reads right to left; that each scene shows its Urdu on the screen (read off
+// the page: drawn, in the window and not scrolled out of its box); that every item of an open menu (its first level,
+// and a sub-menu of the app's own words, Colour's) has no Latin letter but in the kept names (EchoLedger, WhatsApp…:
+// decision 30), its shortcut apart; that none of the Library's English words D1b put in Urdu (Labels, New label,
+// the colours) is on the screen; that the menus' keys read left to right; and that no menu item is cut. It saves
+// docs/design/screens/desktop/urdu-d248/<platform>-<step>.png (light) and <platform>-<step>-dark.png, and fails when a
+// check doesn't hold.
 //   node scripts/urduD248.mjs
 import { createServer } from "vite";
 import { chromium } from "playwright";
@@ -44,18 +48,80 @@ const asComputer = (page, platform) => page.addInitScript((mac) => {
   window.__TAURI_INTERNALS__ = internals;
 }, platform === "macos");
 
-/** Every open menu's items: none cut (its words wider than their box), each shortcut left to right. */
-const menusDrawn = (page) => page.evaluate(() => {
+/** The names kept as they are inside Urdu (decision 30): the app's, the brands' and the plans'; longer ones first. */
+const KEPT = ["WhatsApp Business", "WhatsApp Web", "WhatsApp", "EchoLedger", "Google", "Meet", "Zoom", "Teams", "Groq", "Ultra", "Pro", "Free"];
+/** English words D1b says in Urdu (the sidebar's Labels and New label, the colours), so never on an Urdu screen. */
+const ENGLISH = ["Labels", "New label", "New label…", "Colour", "Grey", "Red", "Orange", "Amber", "Green", "Teal", "Blue", "Pink"];
+
+/**
+ * Every open menu's items, read off the page: each item's words (its shortcut apart, which stays Latin) for the menus
+ * at the first level, and for every open menu with `all` (a sub-menu of the app's own words); none cut (its words
+ * wider than their box); each shortcut left to right.
+ */
+const menusDrawn = (page, all) => page.evaluate(({ all }) => {
   const cut = [];
   const keys = [];
+  const items = [];
   for (const label of document.querySelectorAll('[role="menu"] .el-menu__label')) {
     if (label.scrollWidth > label.clientWidth + 1) cut.push(label.textContent);
   }
   for (const kbd of document.querySelectorAll('[role="menu"] kbd.el-menu__shortcut')) {
     keys.push({ text: kbd.textContent, dir: kbd.getAttribute("dir"), drawn: getComputedStyle(kbd).direction });
   }
-  return { cut, keys };
-});
+  for (const menu of document.querySelectorAll('[role="menu"]')) {
+    if (!all && menu.parentElement?.closest('[role="menu"]')) continue;
+    for (const item of menu.querySelectorAll('[role^="menuitem"]')) {
+      if (item.closest('[role="menu"]') !== menu) continue;
+      const words = item.cloneNode(true);
+      for (const key of words.querySelectorAll(".el-menu__shortcut")) key.remove();
+      items.push(words.textContent.trim());
+    }
+  }
+  return { cut, keys, items };
+}, { all });
+
+/**
+ * Whether `words` are on the screen, read off the page: a text that holds them, drawn (some size, not hidden), in the
+ * window and not scrolled or clipped out of any box it sits in (most of it shown). isVisible() would say yes to a line
+ * scrolled out of its list.
+ */
+const onScreen = (page, words) => page.evaluate((words) => {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.textContent.includes(words) || !node.parentElement) continue;
+    const look = getComputedStyle(node.parentElement);
+    if (look.visibility !== "visible" || look.display === "none") continue;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const r = range.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) continue;
+    let [left, top, right, bottom] = [Math.max(r.left, 0), Math.max(r.top, 0), Math.min(r.right, innerWidth), Math.min(r.bottom, innerHeight)];
+    for (let box = node.parentElement; box && box !== document.documentElement; box = box.parentElement) {
+      const s = getComputedStyle(box);
+      if (s.overflowX === "visible" && s.overflowY === "visible" && s.clipPath === "none") continue;
+      const b = box.getBoundingClientRect();
+      [left, top, right, bottom] = [Math.max(left, b.left), Math.max(top, b.top), Math.min(right, b.right), Math.min(bottom, b.bottom)];
+    }
+    if (right - left >= r.width * 0.6 && bottom - top >= r.height * 0.6) return true;
+  }
+  return false;
+}, words);
+
+/** Which of the English words are on the screen as a whole line of their own (a label, a heading, a button). */
+const englishShown = (page) => page.evaluate((english) => {
+  const found = new Set();
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const words = node.textContent.trim();
+    if (!english.includes(words) || !node.parentElement || node.parentElement.closest(".el-visually-hidden")) continue;
+    const r = node.parentElement.getBoundingClientRect();
+    if (r.width > 1 && r.height > 1 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth) found.add(words);
+  }
+  return [...found];
+}, ENGLISH);
+
+/** Latin letters, but in the kept names. */
+const latinIn = (words) => /[A-Za-z]/.test(KEPT.reduce((rest, name) => rest.split(name).join(""), words));
 
 try {
   for (const [platform, theme] of [["macos", "light"], ["macos", "dark"], ["windows", "light"], ["windows", "dark"]]) {
@@ -69,17 +135,24 @@ try {
     await page.waitForFunction(() => document.documentElement.dir === "rtl", null, { timeout: 30_000 }).catch(() => undefined);
     await page.waitForTimeout(1000);
 
-    /** Saves the window, after checking its direction, that `words` (Urdu) are on it, and the open menus' items. */
-    const shot = async (step, words, { pointer = false } = {}) => {
+    /**
+     * Saves the window, after checking its direction, that `words` (Urdu) are on the screen, that no English word of
+     * the Library's is, and the open menus' items (`all`: a sub-menu's too, when it holds only the app's words).
+     */
+    const shot = async (step, words, { pointer = false, all = false } = {}) => {
       if (!pointer) await page.mouse.move(0, 0);
       await page.waitForTimeout(500);
       await page.screenshot({ path: join(out, `${platform}-${step}${theme === "dark" ? "-dark" : ""}.png`) });
       const at = await root(page);
-      const speaks = await page.getByText(words, { exact: false }).first().isVisible().catch(() => false);
-      const { cut, keys } = await menusDrawn(page);
-      console.log(`${label}: ${step}; <html> ${at}; ${speaks ? "in Urdu" : "NOT in Urdu"}; keys ${keys.map((k) => k.text).join(" ") || "none"}${cut.length ? `; CUT ${cut.join(", ")}` : ""}`);
+      const speaks = await onScreen(page, words);
+      const english = await englishShown(page);
+      const { cut, keys, items } = await menusDrawn(page, all);
+      const latin = items.filter(latinIn);
+      console.log(`${label}: ${step}; <html> ${at}; ${speaks ? "in Urdu" : "NOT in Urdu"}; items ${items.join(" | ") || "none"}; keys ${keys.map((k) => k.text).join(" ") || "none"}${cut.length ? `; CUT ${cut.join(", ")}` : ""}`);
       if (at !== "ur/rtl") problems.push(`${label}: ${step} is ${at}, not ur/rtl`);
       if (!speaks) problems.push(`${label}: ${step} doesn't show “${words}”`);
+      if (latin.length) problems.push(`${label}: ${step}'s menu has Latin words: ${latin.join(", ")}`);
+      if (english.length) problems.push(`${label}: ${step} shows English: ${english.join(", ")}`);
       if (cut.length) problems.push(`${label}: ${step} cuts ${cut.join(", ")}`);
       for (const k of keys) if (k.dir !== "ltr" || k.drawn !== "ltr" || /[؀-ۿ]/.test(k.text)) problems.push(`${label}: ${step}'s key ${k.text} is not Latin, left to right`);
     };
@@ -137,7 +210,7 @@ try {
     await page.getByRole("menuitem", { name: "رنگ" }).hover();
     await page.waitForTimeout(300);
     await page.getByRole("menu", { name: "رنگ" }).waitFor();
-    await shot("label-colour", "اوپر لے جائیں", { pointer: true });
+    await shot("label-colour", "اوپر لے جائیں", { pointer: true, all: true });
     await escape();
 
     // ⌘K (Ctrl+K on Windows): what "ریکارڈ" finds, the action list's commands in Urdu among them.
@@ -146,11 +219,12 @@ try {
     await field.waitFor();
     await field.fill("ریکارڈ");
     await page.waitForTimeout(900);
-    // The commands come last (after the recordings, Ask and the settings): the list scrolled to them.
+    // The commands come last (after the recordings, Ask and the settings): the list scrolled to them, their heading at
+    // its top (a group taller than the list would otherwise be scrolled to its middle, the heading out of sight).
     const commands = page.getByRole("group", { name: "کمانڈز" });
-    await commands.scrollIntoViewIfNeeded();
+    await commands.locator(".palette-group-head").evaluate((head) => head.scrollIntoView({ block: "start" }));
     await shot("palette", "کمانڈز");
-    if (!(await commands.getByRole("option", { name: "نئی ریکارڈنگ" }).isVisible())) problems.push(`${label}: the palette doesn't list نئی ریکارڈنگ`);
+    if (!(await commands.getByRole("option", { name: "نئی ریکارڈنگ" }).count()) || !(await onScreen(page, "نئی ریکارڈنگ"))) problems.push(`${label}: the palette doesn't show نئی ریکارڈنگ`);
     await escape();
     await page.close();
   }

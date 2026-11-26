@@ -134,6 +134,7 @@ class CallLinesShotsTest : ScreenTest() {
             DecisionPopup.resetForTest()
             dark = d
             language = l
+            speak(l)
             scale = s
             // The card over the app follows the app's language and the phone's text size, as the shell does.
             app.resources.configuration.fontScale = s
