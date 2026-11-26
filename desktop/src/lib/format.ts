@@ -83,8 +83,16 @@ export function whenParts(iso?: string | null, now: Date = new Date()): WhenPart
   const time = urdu ? clockTime(date).replace(/\s/g, "\u00A0") : clockTime(date);
   if (today) return { day: urdu ? t("Today") : "Today", time, today, yesterday };
   if (yesterday) return { day: urdu ? t("Yesterday") : "Yesterday", time, today, yesterday };
-  return { day: date.toLocaleDateString(urdu ? "ur-PK" : [], { month: "short", day: "numeric" }), time, today, yesterday };
+  return { day: dayMonth(date), time, today, yesterday };
 }
+
+/** A day with its short month, as whenParts says one that is neither today nor yesterday: "23 Nov", in Urdu "23 نومبر". */
+export function dayMonth(date: Date): string {
+  return date.toLocaleDateString(language() === "ur" ? "ur-PK" : [], { month: "short", day: "numeric" });
+}
+
+/** dayMonth of a calendar day written YYYY-MM-DD (the Library filters' own days), taken at that day's local start. */
+export const calendarDayMonth = (day: string): string => dayMonth(new Date(`${day}T00:00:00`));
 
 /** One of whenParts' parts as a line shows it: as it is in English; in Urdu in its own isolate, closed. */
 export function whenPart(part: string): string {
