@@ -26,6 +26,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -35,6 +39,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -59,12 +64,12 @@ fun EchoListRow(
     leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
     tall: Boolean = false,
-    /** Not read yet (Activity): a dot in the accent just before the title, as classic has it. */
-    unread: Boolean = false,
-    /** What screen readers hear for [unread] ("Unread"), in the screen's words. */
-    unreadLabel: String? = null,
     /** The title in the regular weight (a Library row its person has opened); semibold otherwise. */
     plainTitle: Boolean = false,
+    /** The row's marks in one slot before the time (D12): unread, pin, important, up to three label colours. */
+    marks: EchoRowMarks? = null,
+    /** A hairline under the row, starting at the text (after the [leading] avatar, else at the page margin). */
+    divider: Boolean = false,
     onClickLabel: String? = null,
     onLongClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
@@ -72,10 +77,21 @@ fun EchoListRow(
 ) {
     val c = EchoV2.colors
     val type = EchoV2.type
+    val margin = LocalPageMargin.current
     Row(
         modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = if (tall) EchoTokens.Component.listRowHeightMobileTall else EchoTokens.Layout.rowMobile)
+            // The hairline under the row, from the text to the end, is drawn on the row itself so the row stays one
+            // node (its modifier, its semantics and its tap target are the whole row).
+            .then(
+                if (divider) {
+                    val textStart = if (leading != null) margin + EchoTokens.Component.avatarSize + EchoTokens.Space.s16 else margin
+                    Modifier.rowDivider(textStart, c.borderDefault)
+                } else {
+                    Modifier
+                }
+            )
             .then(
                 when {
                     onLongClick != null -> Modifier.combinedClickable(
@@ -90,21 +106,18 @@ fun EchoListRow(
                     else -> Modifier
                 }
             )
-            .semantics(mergeDescendants = true) { if (unread && unreadLabel != null) stateDescription = unreadLabel }
-            .padding(horizontal = LocalPageMargin.current, vertical = EchoTokens.Space.s8),
+            // The marks are drawn for the eye; their words ("Unread Pinned Important Clients, Home") are the row's state.
+            .semantics(mergeDescendants = true) { marks?.spoken()?.let { stateDescription = it } }
+            .padding(
+                horizontal = margin,
+                vertical = if (tall) EchoTokens.Space.s12 else EchoTokens.Space.s8
+            ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
     ) {
         leading?.invoke()
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s2)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
-                if (unread) {
-                    Box(
-                        Modifier
-                            .size(EchoTokens.Component.statusDotSize)
-                            .background(c.accent, CircleShape)
-                    )
-                }
                 // From 150 % text a title takes two lines, so it says more than a few letters beside the time.
                 Text(
                     title,
@@ -115,7 +128,8 @@ fun EchoListRow(
                     textAlign = startAlign(),
                     modifier = Modifier.weight(1f)
                 )
-                titleEnd?.let { Text(it, style = type.mono, color = c.textSecondary, maxLines = 1) }
+                marks?.let { EchoRowMarksSlot(it) }
+                titleEnd?.let { EchoRowTime(it) }
             }
             if (meta != null || metaEnd != null || status != null) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
@@ -136,6 +150,84 @@ fun EchoListRow(
         trailing?.invoke()
     }
 }
+
+/** A hairline along the bottom edge, [inset] in from the start side (mirrored in right-to-left layouts). */
+private fun Modifier.rowDivider(inset: androidx.compose.ui.unit.Dp, colour: Color) = drawBehind {
+    val h = EchoTokens.Border.hairline.toPx()
+    val from = inset.toPx().coerceAtMost(size.width)
+    val left = if (layoutDirection == LayoutDirection.Rtl) 0f else from
+    drawRect(colour, topLeft = Offset(left, size.height - h), size = Size(size.width - from, h))
+}
+
+/**
+ * A row's marks (D12): shown in one slot, in this order (unread, pin, important, up to three label dots), never inside
+ * the snippet. Each mark carries the words screen readers hear for it, in the screen's language (the caller's string
+ * resources): [unreadWord], [pinnedWord], [importantWord], and each label's name with its colour.
+ */
+data class EchoRowMarks(
+    val unread: Boolean = false,
+    val pinned: Boolean = false,
+    val important: Boolean = false,
+    val labels: List<Pair<String, Color>> = emptyList(),
+    val unreadWord: String? = null,
+    val pinnedWord: String? = null,
+    val importantWord: String? = null
+) {
+    init {
+        // A mark that is drawn is always heard.
+        require(!unread || unreadWord != null) { "an unread mark needs its word" }
+        require(!pinned || pinnedWord != null) { "a pin needs its word" }
+        require(!important || importantWord != null) { "an important mark needs its word" }
+    }
+
+    /** The labels the slot draws: at most three. */
+    val shownLabels: List<Pair<String, Color>> get() = labels.take(MAX_LABEL_DOTS)
+
+    /** Nothing to draw: the slot takes no room. */
+    val isEmpty: Boolean get() = !unread && !pinned && !important && labels.isEmpty()
+
+    /**
+     * What screen readers hear, in the slot's order, as the desktop reads it: the words with spaces, the shown labels'
+     * names with commas ("Unread Pinned Important Clients, Home"); null when there are no marks.
+     */
+    fun spoken(): String? = listOfNotNull(
+        unreadWord.takeIf { unread },
+        pinnedWord.takeIf { pinned },
+        importantWord.takeIf { important },
+        shownLabels.joinToString(", ") { it.first }.ifEmpty { null }
+    ).joinToString(" ").ifEmpty { null }
+
+    private companion object {
+        const val MAX_LABEL_DOTS = 3
+    }
+}
+
+@Composable
+private fun EchoRowMarksSlot(marks: EchoRowMarks) {
+    val c = EchoV2.colors
+    if (marks.isEmpty) return
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
+        // Drawn only: the row's state description says them.
+        if (marks.unread) Box(Modifier.size(EchoTokens.Component.statusDotSize).background(c.accent, CircleShape))
+        if (marks.pinned) Icon(EchoIcons.Pin, null, Modifier.size(EchoTokens.Icon.sm), tint = c.textSecondary)
+        if (marks.important) Icon(EchoIcons.Important, null, Modifier.size(EchoTokens.Icon.sm), tint = c.warning)
+        marks.shownLabels.forEach { (_, colour) ->
+            Box(Modifier.size(EchoTokens.Component.statusDotSize).background(colour, CircleShape))
+        }
+    }
+}
+
+/**
+ * A time or a length on a row's end side ("5:09 am", "15 Nov", "1:19"): the caption in the row's own face with
+ * figures that line up (not the mono face), left to right in every language. For [EchoListRow]'s metaEnd too.
+ */
+@Composable
+fun EchoRowTime(text: String) = Text(
+    text,
+    style = EchoV2.type.caption.copy(fontFeatureSettings = "tnum", textDirection = TextDirection.Ltr),
+    color = EchoV2.colors.textSecondary,
+    maxLines = 1
+)
 
 /**
  * A settings row: the title, an optional [subtitle] (use few), and the current [value] on the end side. The value is

@@ -1528,9 +1528,12 @@ private fun LibraryRow(
             }
         },
         tall = !compact,
-        // Not opened yet (opened false; an older server says nothing): the accent dot and a semibold title, as classic.
-        unread = row.item.opened == false,
-        unreadLabel = stringResource(R.string.v2_lib_not_opened),
+        // Not opened yet (opened false; an older server says nothing): the accent dot, first in the marks slot (D12),
+        // and a semibold title, as classic.
+        marks = com.echoledger.mobile.ui.v2.components.EchoRowMarks(
+            unread = row.item.opened == false,
+            unreadWord = stringResource(R.string.v2_lib_not_opened)
+        ),
         plainTitle = row.item.opened == true,
         onLongClickLabel = stringResource(R.string.v2_lib_select),
         onLongClick = onLongClick,
