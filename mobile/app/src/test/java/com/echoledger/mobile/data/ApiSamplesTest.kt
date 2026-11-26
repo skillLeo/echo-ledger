@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -240,6 +241,13 @@ class ApiSamplesTest {
         "activity.data[0].reason",
         "activity.data[0].missed_recording_id"
     )
+
+    @Test
+    fun `the activity sample's actor reads as no person (2_0_0-aa)`() {
+        val items = ApiJson.decodeFromString(ActivityResponse.serializer(), text("activity")).data
+        assertTrue(items.isNotEmpty())
+        assertEquals(List(items.size) { null }, items.map { it.actor })
+    }
 
     @Test
     fun `no model waits for a field the server never sends`() {
