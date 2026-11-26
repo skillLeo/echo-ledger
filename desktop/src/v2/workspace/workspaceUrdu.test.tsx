@@ -188,7 +188,7 @@ describe("a project's page: every word has its Urdu, and English is as it was", 
       fileLine(file("f", "a.docx", { status: "failed", error: "Scanned image" })), fileLine(file("f", "a.docx", { pages: null, size_bytes: null }))])
       .toEqual([`Markdown · ${iso(1)} صفحہ · 117 KB`, "ٹیکسٹ · 117 KB", "پڑھی جا رہی ہے…", `پڑھی نہیں جا سکی: ${iso("Scanned image")}`, "Word"]);
     expect(memberRows([link({ audience: "people", people: ["sara@acme.pk"] })], [{ item: sentTo("s1", null, "sara@acme.pk") as never, from: { id: "c1", name: "Qureshi Textiles" } }])[0].how)
-      .toBe(`${iso("Qureshi Textiles")} کے ساتھ بھیجا گیا · جب تک آپ شیئر کرنا بند نہ کریں، کھول سکتے ہیں؛ شیئر لنک کے ذریعے`);
+      .toBe(`${iso("Qureshi Textiles")} کو بھیج دیا گیا · جب تک آپ شیئر کرنا بند نہ کریں، وہ اسے کھول سکتے ہیں؛ شیئر لنک کے ذریعے`);
     expect([dragLabel(["Kick-off"]), dragLabel([null]), dragLabel(["a", "b", "c"])])
       .toEqual([`“${iso("Kick-off")}” منتقل ہو رہی ہے`, "ریکارڈنگ منتقل ہو رہی ہے", `${iso(3)} ریکارڈنگز منتقل ہو رہی ہیں`]);
     expect(budgetLine(WS.ai)).toBe(`اس مہینے اے آئی: ${iso("$5.00")} میں سے ${iso("$1.20")} · یہ پروجیکٹ ${iso("$0.40")}`);
@@ -332,13 +332,13 @@ describe("a project's page in Urdu", () => {
     const memory = screen.getByRole("list", { name: "یادداشت" });
     // Under their kinds' headings (فیصلے, تبدیلیاں, حل طلب سوالات), pinned first; the day in the window's language.
     const metas = within(memory).getAllByRole("listitem").map((r) => r.querySelector(".el-row__meta")?.textContent ?? null).filter(Boolean);
-    expect(metas).toEqual(["پن شدہ", `کال سے، ${iso("0:31")} پر`, rowDate("2026-11-14"), "فائل سے"]);
+    expect(metas).toEqual(["پن شدہ", `${iso("0:31")} والی کال سے`, rowDate("2026-11-14"), "فائل سے"]);
     expect(rowDate("2026-11-14")).toMatch(/^14 \S+$/);
     expect(rowDate("2026-11-14")).not.toMatch(/[A-Za-z]/);
     expect(memory).toHaveTextContent(/فیصلے.*تبدیلیاں.*حل طلب سوالات/);
     expect(within(memory).getByRole("button", { name: `“${iso("Packing done by 21 March")}” کا پن ہٹائیں` })).toHaveTextContent("پن ہٹائیں");
     expect(within(memory).getByRole("button", { name: `“${iso("Which bank opens the LC?")}” پن کریں` })).toBeInTheDocument();
-    expect(within(memory).getByRole("button", { name: `کال، ${iso("0:31")} پر کھولیں` })).toHaveTextContent("کھولیں");
+    expect(within(memory).getByRole("button", { name: `${iso("0:31")} والی کال کھولیں` })).toHaveTextContent("کھولیں");
     expect(screen.getByRole("combobox", { name: /^قسم/ })).toHaveTextContent("فیصلہ");
     expect(screen.getByRole("button", { name: "یادداشت میں شامل کریں" })).toBeInTheDocument();
     expect(within(screen.getByRole("list", { name: "ہدایات" })).getByRole("button", { name: `${iso("House rules")} ہٹائیں` })).toBeInTheDocument();
