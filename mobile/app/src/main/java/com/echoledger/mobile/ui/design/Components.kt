@@ -364,7 +364,8 @@ fun RecordingRow(
     time: String,
     meta: String,
     tile: @Composable () -> Unit,
-    onClick: () -> Unit,
+    /** Null for a row with nowhere to go (P-043): it isn't a button then, and is still read as one line. */
+    onClick: (() -> Unit)?,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
     onTileClick: () -> Unit = onLongClick,
@@ -392,11 +393,17 @@ fun RecordingRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = if (compact) 56.dp else 72.dp)
-                .combinedClickable(
-                    onClick = onClick,
-                    onLongClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onLongClick()
+                .then(
+                    if (onClick != null) {
+                        Modifier.combinedClickable(
+                            onClick = onClick,
+                            onLongClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onLongClick()
+                            }
+                        )
+                    } else {
+                        Modifier.semantics(mergeDescendants = true) {}
                     }
                 )
                 .semantics {
@@ -415,7 +422,7 @@ fun RecordingRow(
                     } else {
                         Modifier
                     }
-                ).combinedClickable(onClick = onTileClick, role = Role.Checkbox)
+                ).then(if (onClick != null) Modifier.combinedClickable(onClick = onTileClick, role = Role.Checkbox) else Modifier)
             ) {
                 AnimatedContent(
                     targetState = selecting && selected,
@@ -433,6 +440,9 @@ fun RecordingRow(
                 if (badge != null && !(selecting && selected)) Box(Modifier.align(Alignment.BottomEnd)) { badge() }
             }
             Spacer(Modifier.width(Space.s3))
+            // P-028: at 150 % text and more the title takes two lines and the time moves under it, into the meta line,
+            // so the title has the row's width (at 200 % it was cut to "Invoice questi…" beside a wide date).
+            val large = LocalDensity.current.fontScale >= 1.5f
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
@@ -444,7 +454,7 @@ fun RecordingRow(
                             title,
                             style = type.bodyL.copy(fontWeight = if (unopened) FontWeight.SemiBold else FontWeight.Medium),
                             color = c.text,
-                            maxLines = 1,
+                            maxLines = if (large) 2 else 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false).then(
                                 if (sharedKey !=
@@ -461,11 +471,17 @@ fun RecordingRow(
                             Icon(Icons.Rounded.PushPin, contentDescription = "Pinned", tint = c.textFaint, modifier = Modifier.size(14.dp))
                         }
                     }
-                    Spacer(Modifier.width(Space.s2))
-                    Text(time, style = type.caption.tabular(), color = c.textFaint, maxLines = 1)
+                    if (!large) {
+                        Spacer(Modifier.width(Space.s2))
+                        Text(time, style = type.caption.tabular(), color = c.textFaint, maxLines = 1)
+                    }
                 }
                 Spacer(Modifier.height(Space.s0))
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (large && time.isNotBlank()) {
+                        Text(time, style = type.caption.tabular(), color = c.textFaint, maxLines = 1)
+                        Text(" · ", style = type.labelM.copy(fontWeight = FontWeight.Normal), color = c.textFaint, maxLines = 1)
+                    }
                     if (status != null) {
                         status()
                         Spacer(Modifier.width(Space.s1 + Space.s0))
@@ -889,7 +905,16 @@ fun Avatar(name: String, modifier: Modifier = Modifier, size: Dp = 32.dp) {
         },
         contentAlignment = Alignment.Center
     ) {
-        Text(initials, style = LocalEchoType.current.labelM.copy(fontWeight = FontWeight.SemiBold), color = Color(fg))
+        // P-029: the initials keep their 100 % size at any text scale, so they stay inside the circle (sized in dp); the
+        // name, in contentDescription and beside the avatar, still scales.
+        val label = LocalEchoType.current.labelM
+        val scale = LocalDensity.current.fontScale
+        Text(
+            initials,
+            style = label.copy(fontWeight = FontWeight.SemiBold, fontSize = label.fontSize / scale, lineHeight = label.lineHeight / scale),
+            color = Color(fg),
+            maxLines = 1
+        )
     }
 }
 

@@ -117,7 +117,7 @@
         <item quantity="one">Audio · %d day left</item>
         <item quantity="other">Audio · %d days left</item>
     </plurals>
-    <string name="v2_lib_row_failed">Transcription failed · Tap to retry</string>
+    <string name="v2_lib_row_failed">Transcription failed · Tap to see why</string>
     <string name="v2_lib_row_no_audio">No audio</string>
     <string name="v2_lib_not_opened">Not opened yet</string>
 </resources>

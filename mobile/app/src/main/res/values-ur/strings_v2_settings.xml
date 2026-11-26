@@ -87,6 +87,7 @@
     <string name="v2_set_value_hold_to_talk">بولنے کے لیے دبائے رکھیں</string>
     <string name="v2_set_value_keyboard_on">کی بورڈ آن</string>
     <string name="v2_set_value_keyboard_off">کی بورڈ آف</string>
+    <string name="v2_set_language_not_saved">زبان نہیں بدلی جا سکی۔ دوبارہ کوشش کریں۔</string>
     <string name="v2_set_value_added">شامل ہے</string>
     <string name="v2_set_value_not_added">شامل نہیں</string>
     <string name="v2_set_value_not_set_up">سیٹ اپ نہیں</string>

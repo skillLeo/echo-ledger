@@ -159,7 +159,8 @@ describe("one code path: a menu sends the id, the registry runs it", () => {
     expect(nativeItems(items)).toEqual([
       { action: "file.newRecording", label: "New Recording", accelerator: "CmdOrCtrl+N", enabled: true, checked: null },
       { action: null },
-      { action: "live.autoRecord", label: "Auto-record Calls & Meetings", accelerator: null, enabled: true, checked: false },
+      // The core's menus take a single "&" for a mnemonic marker: "&&" draws one.
+      { action: "live.autoRecord", label: "Auto-record Calls && Meetings", accelerator: null, enabled: true, checked: false },
     ]);
   });
 

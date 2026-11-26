@@ -12,7 +12,7 @@ import { t } from "../../../i18n";
 export function CaptionsPageV2({ settings, patch, onStyle }: { settings: Settings; patch: Patch; onStyle: () => void }) {
   return (
     <>
-      <CaptionPreview style={settings.captionStyle} />
+      <CaptionPreview style={settings.captionStyle} lines={settings.captionLines} />
       <Group footer={<><p>{t(CAPTIONS_SHARE_LINE)}</p><p>{t("You can also right-click the captions while recording to change their style.")}</p></>}>
         <SwitchSetting id="captions.enabled" on={settings.captionsOnRecord} onChange={(v) => void patch({ captionsOnRecord: v })} />
         <LinkSetting id="captions.style" onOpen={onStyle} />
@@ -47,7 +47,7 @@ export function CaptionStylePageV2({ settings, patch }: { settings: Settings; pa
   const save = (next: Partial<CaptionStyle>) => void patch({ captionStyle: { ...style, ...next } });
   return (
     <>
-      <CaptionPreview style={style} />
+      <CaptionPreview style={style} lines={settings.captionLines} />
       <Group>
         <SegmentedSetting<CaptionStyle["size"]> id="captions.size" value={style.size} onChange={(size) => save({ size })} />
         <SegmentedSetting id="captions.lines" value={String(settings.captionLines)} onChange={(v) => void patch({ captionLines: Number(v) })} />

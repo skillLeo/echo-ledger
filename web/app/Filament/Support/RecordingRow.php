@@ -39,7 +39,7 @@ final class RecordingRow
         return [
             'id' => (string) $session->id,
             'title' => $session->displayTitle(),
-            // In the console's language ("واٹس ایپ · Galaxy S25"); a device's own name stays as it is.
+            // In the console's language ("WhatsApp · Galaxy S25"); a device's own name stays as it is.
             'app' => __($session->source_app->getLabel()),
             'device' => $session->device !== null ? CaptureSessionsTable::deviceLabel($session) : __(CaptureSessionsTable::deviceLabel($session)),
             'tile' => self::tile($session->source_app),

@@ -229,8 +229,9 @@ export function ActivityV2({ status, show = "all", needsYou: badge, onOpenRecord
     },
     "activity.retry": () => onFailed(),
   });
+  // In English, as the page is (it isn't in the account's language yet): its menu too, in an Urdu window.
   const itemMenu = (i: ActivityItem): MenuItem[] =>
-    contextItems(ACTIVITY_ITEM, { platform: currentPlatform(), targets: [i.id], kind: "activity" })
+    contextItems(ACTIVITY_ITEM, { platform: currentPlatform(), targets: [i.id], kind: "activity", lang: "en" })
       .filter((m) => (m.action !== "place.open" || !!i.session_id) && (m.action !== "activity.markRead" || !i.read) && (m.action !== "activity.retry" || retries(i)));
   const openMenu = (i: ActivityItem, at: { x: number; y: number }) => {
     const shown = itemMenu(i);

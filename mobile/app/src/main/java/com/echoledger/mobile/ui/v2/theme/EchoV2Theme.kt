@@ -415,7 +415,8 @@ val EchoLanguage.locale: Locale get() = if (this == EchoLanguage.Urdu) Locale.fo
 
 /**
  * Draws [content] with the resources of [language] when the phone's own language is another one (a preview, a test,
- * or an app language chosen in Settings). The activity stays the context's base, so starting activities still works.
+ * an app language chosen in Settings, or English on a phone in French or Arabic, whose dates would otherwise use
+ * that phone's month names). The activity stays the context's base, so starting activities still works.
  * The locals are always provided (the phone's own when they match), so changing the language keeps [content] where
  * it is instead of building it again.
  */
@@ -423,7 +424,7 @@ val EchoLanguage.locale: Locale get() = if (this == EchoLanguage.Urdu) Locale.fo
 fun ProvideLanguage(language: EchoLanguage, content: @Composable () -> Unit) {
     val config = LocalConfiguration.current
     val current = config.locales[0]?.language
-    val matches = if (language == EchoLanguage.Urdu) current == "ur" else current != "ur"
+    val matches = if (language == EchoLanguage.Urdu) current == "ur" else current == "en"
     val context = LocalContext.current
     val localized = remember(context, config, language, matches) {
         if (matches) {

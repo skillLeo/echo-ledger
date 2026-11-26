@@ -196,7 +196,7 @@ class LibraryFacts(
     val item: LibraryItem,
     val day: LocalDate?,
     val values: Map<FilterSection, List<String>>,
-    /** Still `recording`: a call waiting for Keep or Discard, in Needs you only. */
+    /** A call over and waiting for Keep or Discard ([LibraryFacets.isWaiting]), in Needs you only. */
     val waiting: Boolean,
     val needs: String?,
     private val title: String,
@@ -226,6 +226,24 @@ object LibraryFacets {
     const val UNKNOWN = "unknown"
     const val MAX_VALUES = 50
     const val STUCK_HOURS = 24L
+
+    /** Without an end, a call counts as over this long after it started (contract 2.0.0-z: older apps never send one). */
+    const val WAITING_AFTER_HOURS = 4L
+
+    /**
+     * Whether a recording waits for the person's choice after a call (contract 2.0.0-z, the server's isWaiting): its
+     * session is still `recording` and the call is over, `ended_at` set or started more than 4 hours before [now]
+     * (exactly 4 hours is not yet). A call still being recorded is not waiting. The server's `facets.state` "waiting"
+     * counts at once; any other state it sent never stops the clock (the sync keeps a live call's "waiting_to_upload",
+     * and passing 4 hours changes nothing the sync would fetch again).
+     */
+    fun isWaiting(item: LibraryItem, now: Instant): Boolean {
+        if (item.status != "recording") return false
+        if (item.facets?.state == "waiting") return true
+        if (!item.endedAt.isNullOrEmpty()) return true
+        val started = instant(item.startedAt) ?: return false
+        return started.plusSeconds(WAITING_AFTER_HOURS * 3600) < now
+    }
 
     /** Date's presets (Any time is no filter; Custom names its days). */
     val DATES = listOf("today", "last_7_days", "this_month")
@@ -330,13 +348,14 @@ object LibraryFacets {
     private fun instant(s: String?): Instant? = s?.let { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() }
 
     /**
-     * Why the recording needs the person, or null, the first that holds: `waiting` (a call still waiting for Keep or
-     * Discard, session `recording`), `failed` (Status failed), `stuck` (Status processing for more than 24 hours since
+     * Why the recording needs the person, or null, the first that holds: `waiting` (a call over and waiting for Keep or
+     * Discard, session `recording`, see [isWaiting]; one still being recorded needs nothing yet), `failed` (Status
+     * failed), `stuck` (Status processing for more than 24 hours since
      * `processing_since`, the start of the current attempt; without it since it ended, else since it started).
      */
     fun needsReason(item: LibraryItem, now: Instant): String? {
         if (item.deleted) return null
-        if (item.status == "recording") return "waiting"
+        if (item.status == "recording") return if (isWaiting(item, now)) "waiting" else null
         val status = status(item)
         if (status == "failed") return "failed"
         if (status != "processing") return null
@@ -372,7 +391,7 @@ object LibraryFacets {
                     FilterSection.MARKED to marked(item),
                     FilterSection.BOOKMARKS to bookmarks(item)
                 ),
-                waiting = item.status == "recording",
+                waiting = isWaiting(item, now),
                 needs = needsReason(item, now),
                 title = UrduFold.fold(title(item)),
                 text = UrduFold.fold(item.transcript?.preview.orEmpty()),

@@ -116,6 +116,9 @@ object SettingsTransfer {
         "phoneFont",
         "textSize",
         "appLanguage",
+        // The account's own, read from the server on each phone.
+        "accountLanguage",
+        "avatarColor",
         "setupCardHidden",
         "recentSearches",
         // How this phone shows the Library, and what was opened on it (since v1.6).
