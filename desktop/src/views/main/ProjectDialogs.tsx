@@ -6,6 +6,7 @@ import { api, errorMessage, type ClientFolder } from "../../lib/ipc";
 import { canMoveTo, projectLabel, projectTree, subtreeIds, visibleRows } from "../../lib/projects";
 import { CloseIcon, FolderIcon, InboxIcon, PlusIcon, SearchIcon } from "../../components/Icons";
 import type { Notify } from "../../lib/notice";
+import { wordsIn, type Lang } from "../../i18n";
 
 /** Moves recordings into a project (null: the Inbox): one through its own change, several in one bulk action. */
 export async function moveRecordings(ids: readonly string[], projectId: string | null): Promise<void> {
@@ -13,10 +14,20 @@ export async function moveRecordings(ids: readonly string[], projectId: string |
   else await api.bulkSessions([...ids], "move", projectId);
 }
 
-/** "Moved “Kick-off” to Acme › Invoices", "Moved 3 recordings to the Inbox". */
-export function movedText(count: number, title: string | null | undefined, projects: readonly ClientFolder[], projectId: string | null): string {
-  const where = projectId ? projectLabel(projects, projectId) || "the project" : "the Inbox";
-  return count === 1 ? `Moved “${title || "the recording"}” to ${where}` : `Moved ${count} recordings to ${where}`;
+/**
+ * "Moved “Kick-off” to Acme › Invoices", "Moved 3 recordings to the Inbox": in `lang` (the window's language when left
+ * out; a classic page passes "en"), the title and the project's name as they are.
+ */
+export function movedText(count: number, title: string | null | undefined, projects: readonly ClientFolder[], projectId: string | null, lang?: Lang): string {
+  const { t, tc } = wordsIn(lang);
+  const project = projectId ? projectLabel(projects, projectId) : "";
+  if (count === 1) {
+    if (!projectId) return title ? t("Moved “:title” to the Inbox", { title }) : t("Moved “the recording” to the Inbox");
+    if (title) return project ? t("Moved “:title” to :project", { title, project }) : t("Moved “:title” to the project", { title });
+    return project ? t("Moved “the recording” to :project", { project }) : t("Moved “the recording” to the project");
+  }
+  if (!projectId) return tc("Moved :count recordings to the Inbox", count);
+  return project ? tc("Moved :count recordings to :project", count, { project }) : tc("Moved :count recordings to the project", count);
 }
 
 /** A dialog sheet: Escape or a click beside it closes it, except while it is busy. */

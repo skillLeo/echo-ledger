@@ -374,7 +374,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const dropMove = async (ids: string[], projectId: string | null) => {
     try {
       await moveRecordings(ids, projectId);
-      notify(movedText(ids.length, items.find((i) => i.id === ids[0])?.title, folders, projectId), false,
+      notify(movedText(ids.length, items.find((i) => i.id === ids[0])?.title, folders, projectId, "en"), false,
         projectId ? { kind: "project", id: projectId } : { kind: "library", folder: "inbox" });
       if (ids.length > 1) endSelecting();
     } catch (e) {
