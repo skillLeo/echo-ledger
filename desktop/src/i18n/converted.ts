@@ -97,4 +97,10 @@ export const CONVERTED: readonly string[] = [
   "v2/shell/Zoom.tsx",
   "v2/shell/WindowButtons.tsx",
   "v2/shell/PlacePanels.tsx",
+  // D-261: a project's page in the new design (its header, tabs and the Recordings, Files, Memory & instructions and
+  // Members tabs).
+  "v2/workspace/WorkspaceV2.tsx",
+  "v2/workspace/RecordingsTab.tsx",
+  "v2/workspace/FilesTab.tsx",
+  "v2/workspace/MembersTab.tsx",
 ];

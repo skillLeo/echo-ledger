@@ -384,7 +384,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   /** A row pressed and moved: the recording, or every selected one when it is selected, follows the pointer. */
   const startDrag = (e: React.PointerEvent, item: LibraryItem) => {
     const ids = selecting && picked.has(item.id) ? pickedIds : [item.id];
-    beginRecordingDrag(e, () => ({ ids, label: dragLabel(ids.map((id) => items.find((i) => i.id === id)?.title)) }), (moved, projectId) => void dropMove(moved, projectId));
+    beginRecordingDrag(e, () => ({ ids, label: dragLabel(ids.map((id) => items.find((i) => i.id === id)?.title), "en") }), (moved, projectId) => void dropMove(moved, projectId));
   };
   // A smart folder's recordings: the server's list (each shown as saved here when it is), else what this computer can tell.
   const shared = smartFolder === "shared";

@@ -26,6 +26,7 @@ import { featureWords, lowestPlan, openUpgradeSheet, useEntitlements } from "../
 import { ProjectScreens } from "./ScreenMoments";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 import { confirmAction } from "../../lib/confirm";
+import { wordsIn, type Lang } from "../../i18n";
 
 type Tab = "recordings" | "files" | "notes" | "screens" | "ai_notes";
 const TABS: readonly [Tab, string][] = [["recordings", "Recordings"], ["files", "Files"], ["notes", "Notes"], ["screens", "Screens"], ["ai_notes", "AI notes"]];
@@ -43,9 +44,9 @@ export const MEMORY_GROUPS: readonly [MemoryKind, string][] = [["decision", "Dec
 export const CLIENT_FILE_TYPES = ["pdf", "docx", "txt", "md"] as const;
 
 const money = (usd: number) => `$${(Number.isFinite(usd) ? usd : 0).toFixed(2)}`;
-/** "AI this month: $0.42 of $5.00 · this project $0.12" */
-export function budgetLine(ai: Workspace["ai"]): string {
-  return `AI this month: ${money(ai.spent_usd)} of ${money(ai.budget_usd)} · this project ${money(ai.client_spent_usd)}`;
+/** "AI this month: $0.42 of $5.00 · this project $0.12", in the window's language or `lang` (this page passes "en"). */
+export function budgetLine(ai: Workspace["ai"], lang?: Lang): string {
+  return wordsIn(lang).t("AI this month: :spent of :budget · this project :project", { spent: money(ai.spent_usd), budget: money(ai.budget_usd), project: money(ai.client_spent_usd) });
 }
 
 /** Whether anything in the workspace is still being written or read on the server. */
@@ -329,7 +330,7 @@ function Notes({ ws, client, notify, onChange, onReload, onOpenRecording, onClie
               className={`switch ${ws.client.ai_notes ? "on" : ""}`} disabled={busy} onClick={() => void toggleNotes()} />
           </div>
           <div className="budget-line" data-testid="ai-budget" style={{ paddingTop: 10 }}>
-            {ws.ai.configured ? budgetLine(ws.ai) : "AI isn't set up on the server yet: notes, the brief and Ask wait for it. Ask the person who runs the console."}
+            {ws.ai.configured ? budgetLine(ws.ai, "en") : "AI isn't set up on the server yet: notes, the brief and Ask wait for it. Ask the person who runs the console."}
           </div>
         </div>
       </section>
@@ -600,7 +601,7 @@ function Recordings({ client, projects, items, hasFolders, onOpen, onMove, rules
   }, [query, client.id]);
   const startDrag = (e: React.PointerEvent, item: LibraryItem) => {
     if (!onMove) return;
-    beginRecordingDrag(e, () => ({ ids: [item.id], label: dragLabel([item.title]) }), onMove);
+    beginRecordingDrag(e, () => ({ ids: [item.id], label: dragLabel([item.title], "en") }), onMove);
   };
   return (
     <>
